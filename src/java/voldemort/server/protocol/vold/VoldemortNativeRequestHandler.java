@@ -138,6 +138,8 @@ public class VoldemortNativeRequestHandler extends AbstractRequestHandler implem
                          + System.identityHashCode(this) + " key: " + key + " "
                          + (System.nanoTime() - startTimeNs) + " ns, keySize: " + key.length()
                          + "clocks: " + clockStr);
+            logger.debug("VOLDEMORT SERVER TRACE: " + startTimeMs + " GetVersion "
+                         + ByteUtils.getString(key.get(), "UTF-8"));
         }
     }
 
@@ -300,6 +302,10 @@ public class VoldemortNativeRequestHandler extends AbstractRequestHandler implem
         }
 
         ByteArray key = readKey(inputStream);
+        if(logger.isDebugEnabled()) {
+            logger.debug("VOLDEMORT SERVER TRACE: " + startTimeMs + " Get "
+                         + ByteUtils.getString(key.get(), "UTF-8"));
+        }
 
         byte[] transforms = null;
         if(protocolVersion > 2) {
@@ -337,6 +343,15 @@ public class VoldemortNativeRequestHandler extends AbstractRequestHandler implem
         List<ByteArray> keys = new ArrayList<ByteArray>(numKeys);
         for(int i = 0; i < numKeys; i++)
             keys.add(readKey(inputStream));
+
+        if(logger.isDebugEnabled()) {
+            String keysString = new String("");
+            for(ByteArray key: keys) {
+                keysString += " " + ByteUtils.getString(key.get(), "UTF-8");
+            }
+            logger.debug("VOLDEMORT SERVER TRACE: " + startTimeMs + " GetAll " + keysString);
+
+        }
 
         Map<ByteArray, byte[]> transforms = null;
         if(protocolVersion > 2) {
@@ -382,8 +397,9 @@ public class VoldemortNativeRequestHandler extends AbstractRequestHandler implem
             }
         }
 
-        if(logger.isDebugEnabled())
+        if(logger.isDebugEnabled()) {
             logger.debug("GETALL end");
+        }
     }
 
     private void debugLogReturnValue(ByteArray key,
@@ -432,6 +448,11 @@ public class VoldemortNativeRequestHandler extends AbstractRequestHandler implem
         VectorClock clock = new VectorClock(bytes);
         byte[] value = ByteUtils.copy(bytes, clock.sizeInBytes(), bytes.length);
 
+        if(logger.isDebugEnabled()) {
+            logger.debug("VOLDEMORT SERVER TRACE: " + startTimeMs + " Put "
+                         + ByteUtils.getString(key.get(), "UTF-8") + " " + value.length);
+        }
+
         byte[] transforms = null;
         if(protocolVersion > 2) {
             if(inputStream.readBoolean()) {
@@ -467,6 +488,11 @@ public class VoldemortNativeRequestHandler extends AbstractRequestHandler implem
         }
 
         ByteArray key = readKey(inputStream);
+        if(logger.isDebugEnabled()) {
+            logger.debug("VOLDEMORT SERVER TRACE: " + startTimeMs + " Delete "
+                         + ByteUtils.getString(key.get(), "UTF-8"));
+        }
+
         int versionSize = inputStream.readShort();
         byte[] versionBytes = new byte[versionSize];
         ByteUtils.read(inputStream, versionBytes);
