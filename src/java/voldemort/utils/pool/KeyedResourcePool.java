@@ -17,6 +17,13 @@ import org.apache.log4j.Logger;
 import voldemort.utils.Time;
 import voldemort.utils.Utils;
 
+/*
+ * TODO: Update below class comment to be correct once the non-blocking API is
+ * reviewed. Decide whether updating class comment or adding more detailed class
+ * comment in ClientRequestExecutorPool is best approach to noting non-FIFO
+ * nature of non-blocking checkouts. (Unless we manage to keep FIFO ordering.)
+ */
+
 /**
  * A simple implementation of a per-key resource pool. <br>
  * <ul>
@@ -91,6 +98,13 @@ public class KeyedResourcePool<K, V> {
         long startNs = System.nanoTime();
         Pool<V> resources = getResourcePoolForKey(key);
 
+        /*
+         * TODO: Because of the resources.blockingGet call in the middle of the
+         * attempts loop below, only one attempt will ever be made. (I think.)
+         * We should probably refactor to get rid of the attempts loop and to
+         * throw the TimeoutException in exactly one place (after the
+         * blockingGet).
+         */
         // repeatedly attempt to checkout/create a resource until we get a valid
         // one or we hit the timeout or max attempts
         V resource = null;
@@ -103,7 +117,15 @@ public class KeyedResourcePool<K, V> {
                 if(timeRemainingNs < 0)
                     throw new TimeoutException("Could not acquire resource in "
                                                + (this.timeoutNs / Time.NS_PER_MS) + " ms.");
-                resource = checkoutOrCreateResource(key, resources, timeRemainingNs);
+                resource = checkoutOrCreateResource(key, resources);
+                if(resource == null) {
+                    // now block for next available resource
+                    resource = resources.blockingGet(timeRemainingNs);
+                    if(resource == null)
+                        throw new TimeoutException("Timed out wait for resource after "
+                                                   + (timeoutNs / Time.NS_PER_MS) + " ms.");
+                }
+                // Guaranteed to have non-null resource at this point.
                 if(objectFactory.validate(key, resource))
                     return resource;
                 else
@@ -117,26 +139,61 @@ public class KeyedResourcePool<K, V> {
     }
 
     /*
-     * Get a free resource if one exists. If not create one if there is space.
-     * If no space, block and see if a resource is returned in the given
-     * timeout. If no resource is returned in that time, throw a
-     * TimeoutException.
+     * TODO: Update KeyedResourcePoolTest to test non-blocking API changes.
+     * (I.e., nonblockingCheckout and the refactored checkout &
+     * checkoutOrCreateResource calls).
      */
-    private V checkoutOrCreateResource(K key, Pool<V> pool, long timeoutNs) throws Exception {
+
+    /**
+     * Checkout a resource if one is immediately available. If none is available
+     * and we have created fewer than the max size resources, then create a new
+     * one. If no resources are available and we are already at the max size
+     * then return null.
+     * 
+     * This method is guaranteed to either return a valid resource or null
+     * without blocking.
+     * 
+     * @param key The key to checkout the resource for
+     * 
+     * @return The resource
+     */
+    public V nonblockingCheckout(K key) throws Exception {
+        checkNotClosed();
+        Pool<V> resources = getResourcePoolForKey(key);
+
+        V resource = null;
+        try {
+            checkNotClosed();
+            resource = checkoutOrCreateResource(key, resources);
+            if(resource != null) {
+                if(objectFactory.validate(key, resource))
+                    return resource;
+                else
+                    destroyResource(key, resources, resource);
+            }
+        } catch(Exception e) {
+            destroyResource(key, resources, resource);
+            throw e;
+        }
+
+        return null;
+    }
+
+    /*
+     * Get a free resource if one exists. If not create one if there is space.
+     * This method does not block.
+     */
+    private V checkoutOrCreateResource(K key, Pool<V> pool) throws Exception {
         // see if there is anything in the pool
         V resource = pool.nonBlockingGet();
         if(resource != null)
             return resource;
 
         // okay the queue is empty, maybe we have room to expand a bit?
-        if(pool.size.get() < this.poolMaxSize)
+        if(pool.size.get() < this.poolMaxSize) {
             attemptGrow(key, pool);
-
-        // now block for next available resource
-        resource = pool.blockingGet(timeoutNs);
-        if(resource == null)
-            throw new TimeoutException("Timed out wait for resource after "
-                                       + (timeoutNs / Time.NS_PER_MS) + " ms.");
+            resource = pool.nonBlockingGet();
+        }
 
         return resource;
     }
