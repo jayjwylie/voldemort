@@ -1,3 +1,9 @@
+Hot fix change to 0.96.li6 on 25/10/2012
+* Refactored error handling of connection establishment in
+  ClientRequestExecutorFactory.create(). We believe interrupted
+  exceptions in this code path were leaking connections (i.e., never
+  closing recently established, but unused connections).
+
 Release 0.96.li6 (LinkedIn release) on 09/19/2012
 
 Changes made since 0.96.li5
