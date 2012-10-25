@@ -151,6 +151,13 @@ public class KeyedResourcePool<K, V> {
         if(pool.size.incrementAndGet() <= this.poolMaxSize) {
             try {
                 V resource = objectFactory.create(key);
+                // If nonBlockingPut throws an exception, then we would leak a
+                // resource. In the case of V == ClientRequestExecutor, this
+                // will leak a connection. Cannot safely deal with this here (do
+                // not have resource assigned in the catch block) and cannot
+                // safely deal with this in ClientRequestExecutorPool since
+                // clientRequestExecutore.close() checks in the
+                // SocketDestination resource.
                 pool.nonBlockingPut(resource);
             } catch(Exception e) {
                 pool.size.decrementAndGet();

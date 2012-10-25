@@ -205,6 +205,9 @@ public class ClientRequestExecutorFactory implements
             // protocol negotiation failed.
             clientRequest.getResult();
         } catch(Exception e) {
+            /*- UNSAFE. clientRequestExecutor.close() *checks in* the SocketDestination resource. 
+             * This would be bad. See SocketStore.complete().
+             * 
             if(clientRequestExecutor != null) {
                 try {
                     clientRequestExecutor.close();
@@ -213,6 +216,7 @@ public class ClientRequestExecutorFactory implements
                         logger.warn(ex, ex);
                 }
             }
+             */
             if(socketChannel != null) {
                 try {
                     socketChannel.close();
