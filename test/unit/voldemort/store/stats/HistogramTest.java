@@ -1,14 +1,14 @@
 package voldemort.store.stats;
 
+import static org.junit.Assert.assertEquals;
+
 import org.junit.Before;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-
 public class HistogramTest {
-    
+
     private Histogram histogram;
-    
+
     @Before
     public void setUp() {
         histogram = new Histogram(10, 5);
@@ -29,20 +29,43 @@ public class HistogramTest {
         histogram.insert(66);
         histogram.insert(76);
     }
-    
+
     @Test
     public void testAverage() {
         assertEquals(histogram.getQuantile(0.50), 30);
     }
-    
+
     @Test
     public void test95thQuartile() {
         assertEquals(histogram.getQuantile(0.95), 45);
     }
-    
+
     @Test
     public void test99thQuartile() {
         assertEquals(histogram.getQuantile(0.99), 45);
     }
-    
+
+    @Test
+    public void testUpperBoundaryCondition() {
+        Histogram h = new Histogram(100, 1);
+        h.insert(98);
+        h.insert(99);
+        h.insert(100); // Should bucket with 99
+        h.insert(101); // Should bucket with 99
+
+        assertEquals(h.getQuantile(0.24), 98);
+        assertEquals(h.getQuantile(0.26), 99);
+    }
+
+    @Test
+    public void testLowerBoundaryCondition() {
+        Histogram h = new Histogram(100, 1);
+        h.insert(-1); // Should not be bucketed
+        h.insert(0);
+        h.insert(1);
+
+        assertEquals(h.getQuantile(0.49), 0);
+        assertEquals(h.getQuantile(0.51), 1);
+    }
+
 }
