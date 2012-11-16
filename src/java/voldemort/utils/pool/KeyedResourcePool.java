@@ -229,6 +229,21 @@ public class KeyedResourcePool<K, V> {
     public void checkin(K key, V resource) throws Exception {
         if(isOpenAndValid(key, resource)) {
             Pool<V> resourcePool = getResourcePoolForExistingKey(key);
+            // HACK to reap connections
+            // Total # connections
+            int currentPoolSize = resourcePool.size.get();
+            // Checked in connections
+            int currentQueueSize = resourcePool.queue.size();
+            // Reap connection if we have at least 3 connections checked in and
+            // if checking in this resource would leave all connections idle
+            if(currentQueueSize > 2 && currentPoolSize == currentQueueSize + 1) {
+                destroyResource(key, resourcePool, resource);
+                logger.info("Reaped a connection for key (" + key + ") because currentPoolSize is "
+                            + currentPoolSize + " and because currentQueueSize is "
+                            + currentQueueSize);
+                return;
+            }
+
             boolean success = resourcePool.nonBlockingPut(resource);
             if(!success) {
                 destroyResource(key, resourcePool, resource);
@@ -406,6 +421,8 @@ public class KeyedResourcePool<K, V> {
         final private int maxPoolSize;
         final private BlockingQueue<V> queue;
 
+        final private AtomicInteger createsInFlight = new AtomicInteger(0);
+
         public Pool(ResourcePoolConfig resourcePoolConfig) {
             this.maxPoolSize = resourcePoolConfig.getMaxPoolSize();
             queue = new ArrayBlockingQueue<V>(this.maxPoolSize, resourcePoolConfig.isFair());
@@ -433,7 +450,31 @@ public class KeyedResourcePool<K, V> {
 
             if(this.size.incrementAndGet() <= this.maxPoolSize) {
                 try {
-                    V resource = objectFactory.create(key);
+                    V resource = null;
+
+                    try {
+                        if(createsInFlight.getAndIncrement() == 0) {
+                            resource = objectFactory.create(key);
+                        } else {
+                            // HACK to throttle connection establishment
+                            int sleepMs = 1;
+                            int sleeps = 4;
+                            do {
+                                Thread.sleep(sleepMs);
+                                resource = this.queue.poll();
+                                sleeps--;
+                                sleepMs++;
+                            } while(resource == null && sleeps > 0 && createsInFlight.get() > 1);
+                            if(resource == null) {
+                                resource = objectFactory.create(key);
+                            } else {
+                                logger.info("attemptGrow : avoided new connetion but needed sleeps:"
+                                            + (4 - sleeps));
+                            }
+                        }
+                    } finally {
+                        createsInFlight.getAndDecrement();
+                    }
                     if(resource != null) {
                         if(!nonBlockingPut(resource)) {
                             this.size.decrementAndGet();
