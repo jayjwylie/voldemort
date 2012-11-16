@@ -468,7 +468,8 @@ public class KeyedResourcePool<K, V> {
                             if(resource == null) {
                                 resource = objectFactory.create(key);
                             } else {
-                                logger.info("attemptGrow : avoided new connetion but needed sleeps:"
+                                this.size.decrementAndGet();
+                                logger.info("attemptGrow : avoided new connection but needed sleeps: "
                                             + (4 - sleeps));
                             }
                         }
