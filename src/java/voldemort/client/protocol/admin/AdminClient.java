@@ -85,6 +85,7 @@ import voldemort.store.system.SystemStoreConstants;
 import voldemort.store.views.ViewStorageConfiguration;
 import voldemort.utils.ByteArray;
 import voldemort.utils.ByteUtils;
+import voldemort.utils.ClusterUtils;
 import voldemort.utils.MetadataVersionStoreUtils;
 import voldemort.utils.NetworkClassLoader;
 import voldemort.utils.Pair;
@@ -1186,7 +1187,7 @@ public class AdminClient {
                                             int zoneId,
                                             Cluster cluster,
                                             StoreDefinition storeDef) {
-        Map<Integer, Integer> partitionToNodeId = RebalanceUtils.getCurrentPartitionMapping(cluster);
+        Map<Integer, Integer> partitionToNodeId = ClusterUtils.getCurrentPartitionMapping(cluster);
         int nodeId = -1;
         int replicaType = -1;
         int partition = -1;
