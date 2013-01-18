@@ -640,6 +640,7 @@ public class AdminClient {
         final Store<ByteArray, byte[], byte[]> store;
         final ClientRequestExecutorPool clientPool = new ClientRequestExecutorPool(clientConfig.getSelectors(),
                                                                                    clientConfig.getMaxConnectionsPerNode(),
+                                                                                   clientConfig.getConnectionCreatesPerNodeThrottle(),
                                                                                    clientConfig.getConnectionTimeout(TimeUnit.MILLISECONDS),
                                                                                    clientConfig.getSocketTimeout(TimeUnit.MILLISECONDS),
                                                                                    clientConfig.getSocketBufferSize(),

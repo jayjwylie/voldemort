@@ -62,6 +62,7 @@ public class RebootstrappingStoreTest {
     @Before
     public void setUp() throws Exception {
         SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                              0,
                                                                               10000,
                                                                               100000,
                                                                               32 * 1024);

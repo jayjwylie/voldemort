@@ -57,6 +57,7 @@ public class ClientRegistryTest extends TestCase {
     public static final int TOTAL_SERVERS = 2;
 
     private SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(TOTAL_SERVERS,
+                                                                                  0,
                                                                                   10000,
                                                                                   100000,
                                                                                   32 * 1024);

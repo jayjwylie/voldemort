@@ -48,6 +48,7 @@ public class ClientConfig {
 
     private volatile int maxConnectionsPerNode = 50;
     private volatile int maxTotalConnections = 500;
+    private volatile int connectionCreatesPerNodeThrottle = 2;
     private volatile int maxThreads = 5;
     private volatile int maxQueuedRequests = 50;
     private volatile long threadIdleMs = 100000;
@@ -105,6 +106,7 @@ public class ClientConfig {
 
     public static final String MAX_CONNECTIONS_PER_NODE_PROPERTY = "max_connections";
     public static final String MAX_TOTAL_CONNECTIONS_PROPERTY = "max_total_connections";
+    public static final String CONNECTION_CREATES_PER_NODE_THROTTLE = "connections_creates_per_node_throttle";
     public static final String MAX_THREADS_PROPERTY = "max_threads";
     public static final String MAX_QUEUED_REQUESTS_PROPERTY = "max_queued_requests";
     public static final String THREAD_IDLE_MS_PROPERTY = "thread_idle_ms";
@@ -187,6 +189,9 @@ public class ClientConfig {
 
         if(props.containsKey(MAX_TOTAL_CONNECTIONS_PROPERTY))
             this.setMaxTotalConnections(props.getInt(MAX_TOTAL_CONNECTIONS_PROPERTY));
+
+        if(props.containsKey(CONNECTION_CREATES_PER_NODE_THROTTLE))
+            this.setMaxTotalConnections(props.getInt(CONNECTION_CREATES_PER_NODE_THROTTLE));
 
         if(props.containsKey(MAX_THREADS_PROPERTY))
             this.setMaxThreads(props.getInt(MAX_THREADS_PROPERTY));
@@ -363,6 +368,18 @@ public class ClientConfig {
 
     public int getSysMaxConnectionsPerNode() {
         return this.sysMaxConnectionsPerNode;
+    }
+
+    // TODO: MOO
+    private ClientConfig setConnectionCreatesPerNodeThrottle(int connectionCreatesPerNodeThrottle) {
+        if(connectionCreatesPerNodeThrottle < 0)
+            throw new IllegalArgumentException("Value must be greater than zero.");
+        this.connectionCreatesPerNodeThrottle = connectionCreatesPerNodeThrottle;
+        return this;
+    }
+
+    public int getConnectionCreatesPerNodeThrottle() {
+        return this.connectionCreatesPerNodeThrottle;
     }
 
     private ClientConfig setSysRoutingTimeout(int sysRoutingTimeout) {

@@ -59,6 +59,7 @@ public class NioStatsJmxTest {
         ClientConfig clientConfig = new ClientConfig().setMaxConnectionsPerNode(1).setMaxThreads(1);
         SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(clientConfig.getSelectors(),
                                                                               clientConfig.getMaxConnectionsPerNode(),
+                                                                              clientConfig.getConnectionCreatesPerNodeThrottle(),
                                                                               clientConfig.getConnectionTimeout(TimeUnit.MILLISECONDS),
                                                                               clientConfig.getSocketTimeout(TimeUnit.MILLISECONDS),
                                                                               clientConfig.getSocketBufferSize(),

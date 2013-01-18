@@ -137,6 +137,7 @@ public class VoldemortConfig implements Serializable {
     private int clientRoutingTimeoutMs;
     private TimeoutConfig clientTimeoutConfig;
     private int clientMaxConnectionsPerNode;
+    private int clientConnectionCreatesPerNodeThrottle;
     private int clientConnectionTimeoutMs;
     private int clientMaxThreads;
     private int clientThreadIdleMs;
@@ -359,6 +360,9 @@ public class VoldemortConfig implements Serializable {
 
         this.clientSelectors = props.getInt("client.selectors", 4);
         this.clientMaxConnectionsPerNode = props.getInt("client.max.connections.per.node", 50);
+        this.clientConnectionCreatesPerNodeThrottle = props.getInt("client.max.connection.creates.per.node.throttle",
+                                                                   0);
+
         this.clientConnectionTimeoutMs = props.getInt("client.connection.timeout.ms", 500);
         this.clientRoutingTimeoutMs = props.getInt("client.routing.timeout.ms", 15000);
         this.clientTimeoutConfig = new TimeoutConfig(this.clientRoutingTimeoutMs, false);
@@ -1494,6 +1498,14 @@ public class VoldemortConfig implements Serializable {
 
     public void setClientMaxConnectionsPerNode(int maxConnectionsPerNode) {
         this.clientMaxConnectionsPerNode = maxConnectionsPerNode;
+    }
+
+    public int getClientConnectionCreatesPerNodeThrottle() {
+        return clientConnectionCreatesPerNodeThrottle;
+    }
+
+    public void setClientConnectionCreatesPerNodeThrottle(int connectionCreatesPerNodeThrottle) {
+        this.clientConnectionCreatesPerNodeThrottle = connectionCreatesPerNodeThrottle;
     }
 
     public int getClientConnectionTimeoutMs() {

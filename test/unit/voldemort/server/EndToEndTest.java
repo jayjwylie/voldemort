@@ -56,6 +56,7 @@ public class EndToEndTest {
     private static final String STORE_NAME = "test-readrepair-memory";
     private static final String STORES_XML = "test/common/voldemort/config/stores.xml";
     private final SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                        0,
                                                                                         10000,
                                                                                         100000,
                                                                                         32 * 1024);

@@ -64,6 +64,7 @@ public class StreamingSlopPusherTest {
     private static final int NUM_SERVERS = 3;
     private static String storesXmlfile = "test/common/voldemort/config/stores.xml";
     private SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                  0,
                                                                                   100000,
                                                                                   100000,
                                                                                   64 * 1024);

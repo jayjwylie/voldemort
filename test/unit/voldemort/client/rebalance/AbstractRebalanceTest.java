@@ -115,7 +115,7 @@ public abstract class AbstractRebalanceTest {
     @Before
     public void setUp() throws IOException {
         testEntries = ServerTestUtils.createRandomKeyValueString(getNumKeys());
-        socketStoreFactory = new ClientRequestExecutorPool(2, 10000, 100000, 32 * 1024);
+        socketStoreFactory = new ClientRequestExecutorPool(2, 0, 10000, 100000, 32 * 1024);
 
         // First without replication
         roStoreDefWithoutReplication = new StoreDefinitionBuilder().setName(testStoreNameRO)

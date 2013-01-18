@@ -59,6 +59,7 @@ public class EndToEndRebootstrapTest {
     private static String storesXmlfile = "test/common/voldemort/config/stores.xml";
     String[] bootStrapUrls = null;
     private SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                  0,
                                                                                   10000,
                                                                                   100000,
                                                                                   32 * 1024);

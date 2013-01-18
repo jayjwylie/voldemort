@@ -70,6 +70,7 @@ public class ClientRequestExecutorPoolTest {
         this.port = ServerTestUtils.findFreePort();
         this.pool = new ClientRequestExecutorPool(2,
                                                   maxConnectionsPerNode,
+                                                  0,
                                                   1000,
                                                   1000,
                                                   32 * 1024,

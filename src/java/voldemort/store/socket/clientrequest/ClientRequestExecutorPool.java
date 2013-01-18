@@ -67,6 +67,7 @@ public class ClientRequestExecutorPool implements SocketStoreFactory {
 
     public ClientRequestExecutorPool(int selectors,
                                      int maxConnectionsPerNode,
+                                     int connectionCreatesPerNodeThrottle,
                                      int connectionTimeoutMs,
                                      int soTimeoutMs,
                                      int socketBufferSize,
@@ -75,6 +76,7 @@ public class ClientRequestExecutorPool implements SocketStoreFactory {
                                      int jmxId) {
         ResourcePoolConfig config = new ResourcePoolConfig().setIsFair(true)
                                                             .setMaxPoolSize(maxConnectionsPerNode)
+                                                            .setCreatesThrottle(connectionCreatesPerNodeThrottle)
                                                             .setMaxInvalidAttempts(maxConnectionsPerNode)
                                                             .setTimeout(connectionTimeoutMs,
                                                                         TimeUnit.MILLISECONDS);
@@ -104,6 +106,7 @@ public class ClientRequestExecutorPool implements SocketStoreFactory {
 
     public ClientRequestExecutorPool(int selectors,
                                      int maxConnectionsPerNode,
+                                     int connectionCreatesPerNodeThrottle,
                                      int connectionTimeoutMs,
                                      int soTimeoutMs,
                                      int socketBufferSize,
@@ -111,6 +114,7 @@ public class ClientRequestExecutorPool implements SocketStoreFactory {
         // JMX bean is disabled by default
         this(selectors,
              maxConnectionsPerNode,
+             connectionCreatesPerNodeThrottle,
              connectionTimeoutMs,
              soTimeoutMs,
              socketBufferSize,
@@ -120,11 +124,18 @@ public class ClientRequestExecutorPool implements SocketStoreFactory {
     }
 
     public ClientRequestExecutorPool(int maxConnectionsPerNode,
+                                     int connectionCreatesPerNodeThrottle,
                                      int connectionTimeoutMs,
                                      int soTimeoutMs,
                                      int socketBufferSize) {
         // maintain backward compatibility of API
-        this(2, maxConnectionsPerNode, connectionTimeoutMs, soTimeoutMs, socketBufferSize, false);
+        this(2,
+             maxConnectionsPerNode,
+             connectionCreatesPerNodeThrottle,
+             connectionTimeoutMs,
+             soTimeoutMs,
+             socketBufferSize,
+             false);
     }
 
     public ClientRequestExecutorFactory getFactory() {

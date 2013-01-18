@@ -414,16 +414,23 @@ public class KeyedResourcePool<K, V> {
         final private int maxPoolSize;
         final private BlockingQueue<V> queue;
 
+        final private AtomicInteger createsInProgress = new AtomicInteger(0);
+        final private int createsThrottle;
+
         public Pool(ResourcePoolConfig resourcePoolConfig) {
             this.maxPoolSize = resourcePoolConfig.getMaxPoolSize();
+            this.createsThrottle = resourcePoolConfig.getCreatesThrottle();
             queue = new ArrayBlockingQueue<V>(this.maxPoolSize, resourcePoolConfig.isFair());
         }
 
         /**
          * If there is room in the pool, attempt to to create a new resource and
          * add it to the pool. This method is cheap to call even if the pool is
-         * full (i.e., the first thing it does is looks a the current size of
-         * the pool relative to the max pool size.
+         * full (i.e., the first thing the does is look at the current size of
+         * the pool relative to the max pool size).
+         * 
+         * Connection establishment on its own can take time, and the number of
+         * connections that can be established at one time is throttled.
          * 
          * @param key
          * @param objectFactory
@@ -441,10 +448,67 @@ public class KeyedResourcePool<K, V> {
 
             if(this.size.incrementAndGet() <= this.maxPoolSize) {
                 try {
-                    V resource = objectFactory.create(key);
+                    V resource = null;
+                    try {
+                        // Attempt throttled resource creation. A throttle value
+                        // of 0 results in no attempt at throttling.
+                        if(createsInProgress.getAndIncrement() < createsThrottle
+                           || createsThrottle == 0) {
+                            resource = objectFactory.create(key);
+                        } else {
+                            // In a simpler world, we could just return false at
+                            // this point. Unfortunately, an existing, ugly
+                            // corner-case may be exacerbated by connection
+                            // establishment throttling: blocking gets may not
+                            // be served if a resource is destroyed at time of
+                            // checkin. I.e., continued connection
+                            // checkout/grow/checkin activity is required to
+                            // ensure blocking gets actually get serviced (if
+                            // possible). To mitigate the risk of encountering
+                            // this corner case (which tests are more likely to
+                            // tickle than reality), do some lame backoff, then
+                            // just ignore the throttling.
+
+                            int sleepMs = 1;
+                            int retries = 6;
+                            int backoff = 2;
+                            // 1, 2, 4, 8, 16, 32 ms = 63ms max agg backoff
+                            do {
+                                Thread.sleep(sleepMs);
+                                resource = nonBlockingGet();
+                                retries--;
+                                sleepMs *= backoff;
+                            } while(resource == null && retries > 0);
+
+                            if(resource == null) {
+                                if(logger.isDebugEnabled()) {
+                                    logger.debug("Connection establishment done in unthrottled manner.");
+                                }
+                                resource = objectFactory.create(key);
+                            } else {
+                                // Since we are stealing an existing connection
+                                // rather than actually establishing a new
+                                // connection, must decrement pool size along on
+                                // this "good" path.
+                                this.size.decrementAndGet();
+                            }
+                        }
+                    } finally {
+                        createsInProgress.getAndDecrement();
+                    }
+
                     if(resource != null) {
-                        if(!nonBlockingPut(resource)) {
-                            this.size.decrementAndGet();
+                        if(nonBlockingPut(resource)) {
+                            // This is the "good" path!
+                            if(logger.isDebugEnabled()) {
+                                logger.debug("attemptGrow established new connection for key "
+                                             + key.toString()
+                                             + ". "
+                                             + " After checking in to KeyedResourcePool, there are "
+                                             + queue.size() + " destinations checked in.");
+                            }
+                            return true;
+                        } else {
                             objectFactory.destroy(key, resource);
                             if(logger.isInfoEnabled()) {
                                 logger.info("attemptGrow established new connection for key "
@@ -452,13 +516,6 @@ public class KeyedResourcePool<K, V> {
                                             + " and immediately destroyed the new connection "
                                             + "because there were too many connections already established.");
                             }
-                            return false;
-                        }
-                        if(logger.isDebugEnabled()) {
-                            logger.debug("attemptGrow established new connection for key "
-                                         + key.toString() + ". "
-                                         + " After checking in to KeyedResourcePool, there are "
-                                         + queue.size() + " destinations checked in.");
                         }
                     }
                 } catch(Exception e) {
@@ -467,12 +524,64 @@ public class KeyedResourcePool<K, V> {
                     this.size.decrementAndGet();
                     throw e;
                 }
-            } else {
-                this.size.decrementAndGet();
+            }
+            // Above code either returns true or (re)throws an exception. So,
+            // this is the "bad" path and this.size must be decremented.
+            this.size.decrementAndGet();
+            return false;
+        }
+
+        /*-
+        public <K> boolean attemptGrow(K key, ResourceFactory<K, V> objectFactory) throws Exception {
+            if(this.size.get() >= this.maxPoolSize) {
                 return false;
             }
-            return true;
+
+            if(this.size.incrementAndGet() <= this.maxPoolSize) {
+                try {
+                    V resource = null;
+                    try { // Throttled resource creation.
+                        if(createsInProgress.getAndIncrement() < createsThrottle) {
+                            resource = objectFactory.create(key);
+                        }
+                    } finally {
+                        createsInProgress.getAndDecrement();
+                    }
+
+                    if(resource != null) {
+                        if(nonBlockingPut(resource)) {
+                            // This is the "good" path!
+                            if(logger.isDebugEnabled()) {
+                                logger.debug("attemptGrow established new connection for key "
+                                             + key.toString()
+                                             + ". "
+                                             + " After checking in to KeyedResourcePool, there are "
+                                             + queue.size() + " destinations checked in.");
+                            }
+                            return true;
+                        } else {
+                            objectFactory.destroy(key, resource);
+                            if(logger.isInfoEnabled()) {
+                                logger.info("attemptGrow established new connection for key "
+                                            + key.toString()
+                                            + " and immediately destroyed the new connection "
+                                            + "because there were too many connections already established.");
+                            }
+                        }
+                    }
+                } catch(Exception e) {
+                    // If nonBlockingPut throws an exception, then we could leak
+                    // the resource created by objectFactory.create().
+                    this.size.decrementAndGet();
+                    throw e;
+                }
+            }
+            // Above code either returns true or (re)throws an exception. So,
+            // this is the "bad" path and this.size must be decremented.
+            this.size.decrementAndGet();
+            return false;
         }
+         */
 
         public V nonBlockingGet() {
             return this.queue.poll();

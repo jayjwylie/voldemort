@@ -63,6 +63,7 @@ public class GossiperTest {
     private static final int socketBufferSize = 4096;
     private static final int adminSocketBufferSize = 8192;
     private SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                  0,
                                                                                   10000,
                                                                                   100000,
                                                                                   socketBufferSize);

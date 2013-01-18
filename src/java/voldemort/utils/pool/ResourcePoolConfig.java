@@ -14,6 +14,7 @@ public class ResourcePoolConfig {
     private long timeoutNs = Long.MAX_VALUE;
     private int maxInvalidResourceCreations = Integer.MAX_VALUE;
     private boolean isFair = true;
+    private int createsThrottle = 2;
 
     public ResourcePoolConfig() {
         super();
@@ -29,7 +30,7 @@ public class ResourcePoolConfig {
     /**
      * The size of the pool to maintain for each key.
      * 
-     * The default pool size is 20
+     * The default pool size is 20.
      * 
      * @param poolSize The desired per-key pool size
      */
@@ -41,7 +42,7 @@ public class ResourcePoolConfig {
     }
 
     /**
-     * Get the the pool timeout in the given units
+     * Get the pool timeout in the given units
      * 
      * @param unit The units in which to fetch the timeout
      * @return The timeout
@@ -52,6 +53,8 @@ public class ResourcePoolConfig {
 
     /**
      * The timeout which we block for when a resource is not available
+     * 
+     * The default timeout is Long.MAX_VALUE ns.
      * 
      * @param timeout The timeout
      * @param unit The units of the timeout
@@ -100,9 +103,36 @@ public class ResourcePoolConfig {
      * Controls whether the pool gives resources to threads in the order they
      * arrive or not. An unfair pool is approximately 10x faster, but gives not
      * guarantee on the order in which waiting threads get a resource.
+     * 
+     * The default value is true.
      */
     public ResourcePoolConfig setIsFair(boolean isFair) {
         this.isFair = isFair;
+        return this;
+    }
+
+    /**
+     * Get the throttle on number of simultaneous creates issued.
+     * 
+     * @return the number of simultaneous creates that can be issued
+     *         simultaneously
+     */
+    public int getCreatesThrottle() {
+        return this.createsThrottle;
+    }
+
+    /**
+     * The throttle on the number of simultaneous creates that can be issued
+     * simultaneously. This is a "soft" throttle, i.e., there are corner cases
+     * in which more than the specified throttle number of creates may be issued
+     * simultaneously.
+     * 
+     * The default value is 2. A value of 0 result in no throttling.
+     * 
+     * @param createsThrottle
+     */
+    public ResourcePoolConfig setCreatesThrottle(int createsThrottle) {
+        this.createsThrottle = createsThrottle;
         return this;
     }
 

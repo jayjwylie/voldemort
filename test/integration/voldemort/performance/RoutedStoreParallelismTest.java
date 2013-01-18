@@ -145,6 +145,7 @@ public class RoutedStoreParallelismTest {
 
         SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(clientConfig.getSelectors(),
                                                                               clientConfig.getMaxConnectionsPerNode(),
+                                                                              clientConfig.getConnectionCreatesPerNodeThrottle(),
                                                                               clientConfig.getConnectionTimeout(TimeUnit.MILLISECONDS),
                                                                               clientConfig.getSocketTimeout(TimeUnit.MILLISECONDS),
                                                                               clientConfig.getSocketBufferSize(),

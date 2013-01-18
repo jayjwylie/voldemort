@@ -22,8 +22,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
@@ -65,6 +65,7 @@ public class AdminServiceMultiJVMTest extends AbstractAdminServiceFilterTest {
     private final boolean useNio;
     protected StoreDefinition storeDef;
     private final SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                        0,
                                                                                         10000,
                                                                                         100000,
                                                                                         32 * 1024);

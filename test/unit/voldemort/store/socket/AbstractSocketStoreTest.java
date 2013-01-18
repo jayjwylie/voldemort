@@ -73,7 +73,7 @@ public abstract class AbstractSocketStoreTest extends AbstractByteArrayStoreTest
     public void setUp() throws Exception {
         super.setUp();
         this.socketPort = ServerTestUtils.findFreePort();
-        socketStoreFactory = new ClientRequestExecutorPool(2, 10000, 100000, 32 * 1024);
+        socketStoreFactory = new ClientRequestExecutorPool(2, 0, 10000, 100000, 32 * 1024);
         socketService = ServerTestUtils.getSocketService(useNio,
                                                          VoldemortTestConstants.getOneNodeClusterXml(),
                                                          VoldemortTestConstants.getSimpleStoreDefinitionsXml(),

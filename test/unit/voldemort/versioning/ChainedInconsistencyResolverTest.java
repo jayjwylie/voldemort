@@ -53,6 +53,7 @@ public class ChainedInconsistencyResolverTest {
     private StoreClient<String, String> defaultStoreClient;
     private Store<ByteArray, byte[], byte[]> socketStore;
     private final SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                        0,
                                                                                         10000,
                                                                                         100000,
                                                                                         32 * 1024);

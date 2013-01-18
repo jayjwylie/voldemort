@@ -155,6 +155,7 @@ public class SimpleSocketPoolTest extends TestCase {
                                                                   .setMaxPoolSize(20);
 
         ClientRequestExecutorPool clientRequestExecutorPool = new ClientRequestExecutorPool(config.getMaxPoolSize(),
+                                                                                            config.getCreatesThrottle(),
                                                                                             (int) config.getTimeout(TimeUnit.MILLISECONDS),
                                                                                             100,
                                                                                             1000);

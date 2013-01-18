@@ -67,6 +67,7 @@ public class AdminFetchTest {
         partitionToKeysMap = new HashMap<Integer, Set<String>>();
 
         SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                              0,
                                                                               10000,
                                                                               100000,
                                                                               32 * 1024);

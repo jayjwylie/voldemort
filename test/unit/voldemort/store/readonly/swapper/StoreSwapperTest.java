@@ -67,6 +67,7 @@ public class StoreSwapperTest {
     private static String STORE_NAME = "test";
     private static SerializerDefinition serializerDef = new SerializerDefinition("json", "'string'");
     private SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                  0,
                                                                                   10000,
                                                                                   100000,
                                                                                   32 * 1024);

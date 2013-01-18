@@ -99,6 +99,7 @@ public class AdminServiceBasicTest {
     private static String testStoreName = "test-replication-memory";
     private static String storesXmlfile = "test/common/voldemort/config/stores.xml";
     private SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                  0,
                                                                                   10000,
                                                                                   100000,
                                                                                   32 * 1024);

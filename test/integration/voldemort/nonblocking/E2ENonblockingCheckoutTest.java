@@ -84,6 +84,7 @@ public class E2ENonblockingCheckoutTest {
     private static final int ROUTING_TIMEOUT_MS = 10 * 1000; // 100 * 1000;
 
     private final SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(CONNECTIONS_PER_NODE,
+                                                                                        0,
                                                                                         CONNECTION_TIMEOUT_MS,
                                                                                         SOCKET_TIMEOUT_MS,
                                                                                         32 * 1024);

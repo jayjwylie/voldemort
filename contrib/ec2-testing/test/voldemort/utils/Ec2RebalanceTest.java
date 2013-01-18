@@ -123,6 +123,7 @@ public class Ec2RebalanceTest extends AbstractRebalanceTest {
                                                               int port,
                                                               boolean isRouted) {
         SocketStoreFactory storeFactory = new ClientRequestExecutorPool(2,
+                                                                        0,
                                                                         60 * 1000,
                                                                         60 * 1000,
                                                                         32 * 1024);

@@ -154,6 +154,7 @@ public class StorageService extends AbstractService {
                                                      config.getClientMaxQueuedRequests());
         this.storeFactory = new ClientRequestExecutorPool(config.getClientSelectors(),
                                                           config.getClientMaxConnectionsPerNode(),
+                                                          config.getClientConnectionCreatesPerNodeThrottle(),
                                                           config.getClientConnectionTimeoutMs(),
                                                           config.getSocketTimeoutMs(),
                                                           config.getSocketBufferSize(),

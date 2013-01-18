@@ -103,6 +103,7 @@ public class E2EClientRequestExecutorPoolAndFailureDetectorTest {
     public void setUp(int opSlowMs, int numSelectors, int connectionsPerNode) throws Exception {
         socketStoreFactory = new ClientRequestExecutorPool(numSelectors,
                                                            connectionsPerNode,
+                                                           0,
                                                            CONNECTION_TIMEOUT_MS,
                                                            SOCKET_TIMEOUT_MS,
                                                            SOCKET_BUFFER_SIZE,

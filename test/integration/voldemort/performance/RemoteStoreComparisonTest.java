@@ -97,7 +97,11 @@ public class RemoteStoreComparisonTest {
         String storeName = "test";
         StoreRepository repository = new StoreRepository();
         repository.addLocalStore(new InMemoryStorageEngine<ByteArray, byte[], byte[]>(storeName));
-        SocketStoreFactory storeFactory = new ClientRequestExecutorPool(10, 1000, 1000, 32 * 1024);
+        SocketStoreFactory storeFactory = new ClientRequestExecutorPool(10,
+                                                                        0,
+                                                                        1000,
+                                                                        1000,
+                                                                        32 * 1024);
         final Store<ByteArray, byte[], byte[]> socketStore = storeFactory.create(storeName,
                                                                                  "localhost",
                                                                                  6666,

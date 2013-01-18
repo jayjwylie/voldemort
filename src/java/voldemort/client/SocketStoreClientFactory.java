@@ -64,6 +64,7 @@ public class SocketStoreClientFactory extends AbstractStoreClientFactory {
                                                                            false);
         this.storeFactory = new ClientRequestExecutorPool(config.getSelectors(),
                                                           config.getMaxConnectionsPerNode(),
+                                                          config.getConnectionCreatesPerNodeThrottle(),
                                                           config.getConnectionTimeout(TimeUnit.MILLISECONDS),
                                                           config.getSocketTimeout(TimeUnit.MILLISECONDS),
                                                           config.getSocketBufferSize(),

@@ -52,6 +52,7 @@ public class ServerStoreVerifierTest {
     private Cluster cluster;
 
     private SocketStoreFactory socketStoreFactory = new ClientRequestExecutorPool(2,
+                                                                                  0,
                                                                                   10000,
                                                                                   100000,
                                                                                   32 * 1024);
