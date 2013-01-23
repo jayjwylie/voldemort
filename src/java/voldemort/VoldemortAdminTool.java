@@ -55,6 +55,7 @@ import org.codehaus.jackson.JsonGenerator;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import voldemort.client.protocol.admin.AdminClient;
+import voldemort.client.protocol.admin.AdminClient.QueryKeyResult;
 import voldemort.client.protocol.admin.AdminClientConfig;
 import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
@@ -1609,9 +1610,9 @@ public class VoldemortAdminTool {
             listKeys.add(new ByteArray(serializer.toBytes(key)));
         }
         for(final String storeName: storeNames) {
-            final Iterator<Pair<ByteArray, Pair<List<Versioned<byte[]>>, Exception>>> iterator = adminClient.queryKeys(nodeId.intValue(),
-                                                                                                                       storeName,
-                                                                                                                       listKeys.iterator());
+            final Iterator<QueryKeyResult> iterator = adminClient.queryKeys(nodeId.intValue(),
+                                                                            storeName,
+                                                                            listKeys.iterator());
             List<StoreDefinition> storeDefinitionList = adminClient.getRemoteStoreDefList(nodeId)
                                                                    .getValue();
             StoreDefinition storeDefinition = null;
@@ -1654,15 +1655,15 @@ public class VoldemortAdminTool {
                                        + "\n");
 
                     while(iterator.hasNext()) {
-                        Pair<ByteArray, Pair<List<Versioned<byte[]>>, Exception>> kvPair = iterator.next();
+                        QueryKeyResult queryKeyResult = iterator.next();
                         // unserialize and write key
-                        byte[] keyBytes = kvPair.getFirst().get();
+                        byte[] keyBytes = queryKeyResult.key.get();
                         Object keyObject = keySerializer.toObject((null == keyCompressionStrategy) ? keyBytes
                                                                                                   : keyCompressionStrategy.inflate(keyBytes));
                         generator.writeObject(keyObject);
 
                         // iterate through, unserialize and write values
-                        List<Versioned<byte[]>> values = kvPair.getSecond().getFirst();
+                        List<Versioned<byte[]>> values = queryKeyResult.values;
                         if(values != null) {
                             if(values.size() == 0) {
                                 stringWriter.write(", null");
@@ -1684,9 +1685,9 @@ public class VoldemortAdminTool {
                             stringWriter.write(", null");
                         }
                         // write out exception
-                        if(kvPair.getSecond().getSecond() != null) {
+                        if(queryKeyResult.exception != null) {
                             stringWriter.write(", ");
-                            stringWriter.write(kvPair.getSecond().getSecond().toString());
+                            stringWriter.write(queryKeyResult.exception.toString());
                         }
 
                         StringBuffer buf = stringWriter.getBuffer();

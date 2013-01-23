@@ -343,6 +343,11 @@ public class AdminClient {
      * @param nodeKeyValue A specific key/value to update on a specific node.
      * @return null means success.
      */
+    // TODO: Change method name? Have its interface better match that of
+    // queryKeys? What about being more similar to fetchEntries interface? Or,
+    // can this method be replaced by (or invoke) updateEntries?
+    // TODO: Create an AdminStoreClient that establishes and maintains the
+    // clientPool for multiple invocations of repairEntry (and of queryKeys)
     public Exception repairEntry(String storeName, NodeValue<ByteArray, byte[]> nodeKeyValue) {
         Node node = this.getAdminClientCluster().getNodeById(nodeKeyValue.getNodeId());
         ClientConfig clientConfig = new ClientConfig();
@@ -371,18 +376,27 @@ public class AdminClient {
         try {
             store.put(key, value, null);
         } catch(ObsoleteVersionException ove) {
-            // TODO: use logger rather than System.out and create struct to hold
-            // all return info for processsing by caller.
-            System.out.println("Node with id " + nodeKeyValue.getNodeId()
-                               + " received ObsoleteVersionException. IGNORING!");
             // Treat ove as success!
+            logger.debug("Node with id " + nodeKeyValue.getNodeId()
+                         + " received ObsoleteVersionException. IGNORING!");
         } catch(VoldemortException ve) {
-            System.out.println("Node with id " + nodeKeyValue.getNodeId()
-                               + " received some VoldemortException.");
+            logger.info("Node with id " + nodeKeyValue.getNodeId()
+                        + " received some VoldemortException trying to repair key " + key + " : "
+                        + ve.getMessage());
+            if(logger.isTraceEnabled()) {
+                ve.printStackTrace();
+            }
             exception = ve;
-        } // TODO: Do we need to catch non-Voldemort exceptions?!
+        }
+        // TODO: Should non-Voldemort exceptions be caught and processed like
+        // VoldemortExceptions?
+        finally {
+            clientPool.close();
 
-        clientPool.close();
+        }
+
+        // TODO: Is the return type of 'exception' with null being 'success'
+        // good enough? Or, is some richer return type needed?
         return exception;
     }
 
@@ -745,6 +759,16 @@ public class AdminClient {
     }
 
     /**
+     * Return type of QueryKeys
+     */
+    public static class QueryKeyResult {
+
+        public ByteArray key = null;
+        public List<Versioned<byte[]>> values = null;
+        public Exception exception = null;
+    }
+
+    /**
      * Fetch key/value tuples belonging to a node with given key values
      * 
      * <p>
@@ -757,9 +781,9 @@ public class AdminClient {
      * @return An iterator which allows entries to be streamed as they're being
      *         iterated over.
      */
-    public Iterator<Pair<ByteArray, Pair<List<Versioned<byte[]>>, Exception>>> queryKeys(int nodeId,
-                                                                                         String storeName,
-                                                                                         final Iterator<ByteArray> keys) {
+    public Iterator<QueryKeyResult> queryKeys(int nodeId,
+                                              String storeName,
+                                              final Iterator<ByteArray> keys) {
 
         Node node = this.getAdminClientCluster().getNodeById(nodeId);
         ClientConfig clientConfig = new ClientConfig();
@@ -782,25 +806,23 @@ public class AdminClient {
             throw new VoldemortException(e);
         }
 
-        return new AbstractIterator<Pair<ByteArray, Pair<List<Versioned<byte[]>>, Exception>>>() {
+        return new AbstractIterator<QueryKeyResult>() {
 
             @Override
-            public Pair<ByteArray, Pair<List<Versioned<byte[]>>, Exception>> computeNext() {
-                ByteArray key;
-                Exception exception = null;
-                List<Versioned<byte[]>> value = null;
+            public QueryKeyResult computeNext() {
+                QueryKeyResult queryKeyResult = new QueryKeyResult();
                 if(!keys.hasNext()) {
                     clientPool.close();
                     return endOfData();
                 } else {
-                    key = keys.next();
+                    queryKeyResult.key = keys.next();
                 }
                 try {
-                    value = store.get(key, null);
+                    queryKeyResult.values = store.get(queryKeyResult.key, null);
                 } catch(Exception e) {
-                    exception = e;
+                    queryKeyResult.exception = e;
                 }
-                return Pair.create(key, Pair.create(value, exception));
+                return queryKeyResult;
             }
         };
     }
@@ -1029,6 +1051,7 @@ public class AdminClient {
         ExecutorService executors = Executors.newFixedThreadPool(parallelTransfers,
                                                                  new ThreadFactory() {
 
+                                                                     @Override
                                                                      public Thread newThread(Runnable r) {
                                                                          Thread thread = new Thread(r);
                                                                          thread.setName("restore-data-thread");
@@ -1231,6 +1254,7 @@ public class AdminClient {
             final int donorNodeId = replicationEntry.getKey();
             executorService.submit(new Runnable() {
 
+                @Override
                 public void run() {
                     try {
                         logger.info("Restoring data for store " + storeDef.getName() + " at node "
