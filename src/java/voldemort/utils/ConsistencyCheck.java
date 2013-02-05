@@ -299,7 +299,7 @@ public class ConsistencyCheck {
     private enum ConsistencyLevel {
         FULL,
         LATEST_CONSISTENT,
-        ORANGE
+        INCONSISTENT
     }
 
     protected static class PrefixNode {
@@ -415,8 +415,8 @@ public class ConsistencyCheck {
 
     protected static class RetentionChecker {
 
-        final long bufferTimeSeconds = 600; // expire N seconds earlier
-        final long expiredTimeMs;
+        final private long bufferTimeSeconds = 600; // expire N seconds earlier
+        final private long expiredTimeMs;
 
         /**
          * A checker to determine if a key is to be cleaned according to
@@ -429,7 +429,8 @@ public class ConsistencyCheck {
                 expiredTimeMs = 0;
             } else {
                 long now = System.currentTimeMillis();
-                expiredTimeMs = now - (86400 * days - bufferTimeSeconds) * 1000;
+                expiredTimeMs = now - (Time.SECONDS_PER_DAY * days - bufferTimeSeconds)
+                                * Time.MS_PER_SECOND;
             }
         }
 
@@ -576,7 +577,7 @@ public class ConsistencyCheck {
                 return ConsistencyLevel.LATEST_CONSISTENT;
             }
             // all other states inconsistent
-            return ConsistencyLevel.ORANGE;
+            return ConsistencyLevel.INCONSISTENT;
         }
     }
 
