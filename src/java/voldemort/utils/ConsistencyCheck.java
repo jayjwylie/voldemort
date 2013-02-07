@@ -26,15 +26,15 @@ import voldemort.versioning.Versioned;
 
 public class ConsistencyCheck {
 
-    Boolean verbose = false;
-    List<String> urls;
-    String storeName;
-    Integer partitionId;
+    private Boolean verbose = false;
+    private List<String> urls;
+    private String storeName;
+    private Integer partitionId;
 
-    Integer retentionDays = 0;
-    Integer replicationFactor = 0;
-    Integer requiredWrites = 0;
-    Map<PrefixNode, Iterator<Pair<ByteArray, Versioned<byte[]>>>> nodeEntriesMap;
+    private Integer retentionDays = 0;
+    private Integer replicationFactor = 0;
+    private Integer requiredWrites = 0;
+    private Map<PrefixNode, Iterator<Pair<ByteArray, Versioned<byte[]>>>> nodeEntriesMap;
 
     public ConsistencyCheck(List<String> urls, String storeName, int partitionId, boolean verbose) {
         this.urls = urls;
@@ -70,7 +70,7 @@ public class ConsistencyCheck {
             Cluster cluster = adminClient.getAdminClientCluster();
 
             /* find store */
-            Versioned<List<StoreDefinition>> storeDefinitions = adminClient.getRemoteStoreDefList(0);
+            Versioned<List<StoreDefinition>> storeDefinitions = adminClient.metadataMgmtOps.getRemoteStoreDefList(0);
             List<StoreDefinition> StoreDefitions = storeDefinitions.getValue();
             StoreDefinition storeDefinition = null;
             for(StoreDefinition def: StoreDefitions) {
@@ -134,13 +134,17 @@ public class ConsistencyCheck {
             /* get entry Iterator from each node */
             for(Integer nodeId: nodeIdList) {
                 Iterator<Pair<ByteArray, Versioned<byte[]>>> entries;
-                entries = adminClient.fetchEntries(nodeId, storeName, singlePartition, null, false);
+                entries = adminClient.bulkFetchOps.fetchEntries(nodeId,
+                                                                storeName,
+                                                                singlePartition,
+                                                                null,
+                                                                false);
                 nodeEntriesMap.put(new PrefixNode(urlId, cluster.getNodeById(nodeId)), entries);
             }
 
             // calculate overall replication factor and required writes
             replicationFactor += storeDefinition.getReplicationFactor();
-            if(requiredWrites == null) {
+            if(requiredWrites == 0) {
                 requiredWrites = storeDefinition.getRequiredWrites();
             }
             urlId++;
@@ -296,7 +300,7 @@ public class ConsistencyCheck {
         return stats;
     }
 
-    private enum ConsistencyLevel {
+    protected enum ConsistencyLevel {
         FULL,
         LATEST_CONSISTENT,
         INCONSISTENT
