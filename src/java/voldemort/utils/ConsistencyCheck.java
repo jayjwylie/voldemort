@@ -26,10 +26,10 @@ import voldemort.versioning.Versioned;
 
 public class ConsistencyCheck {
 
-    private Boolean verbose = false;
-    private List<String> urls;
-    private String storeName;
-    private Integer partitionId;
+    private final Boolean verbose;
+    private final List<String> urls;
+    private final String storeName;
+    private final Integer partitionId;
 
     private Integer retentionDays = 0;
     private Integer replicationFactor = 0;
@@ -65,15 +65,18 @@ public class ConsistencyCheck {
             if(this.verbose) {
                 System.out.println("Connecting to bootstrap server: " + url);
             }
+            // TODO: adminClient.stop() is never explicitly called. I think it
+            // should be.
             AdminClient adminClient = new AdminClient(url, new AdminClientConfig(), 0);
             adminClients.add(adminClient);
             Cluster cluster = adminClient.getAdminClientCluster();
 
             /* find store */
             Versioned<List<StoreDefinition>> storeDefinitions = adminClient.metadataMgmtOps.getRemoteStoreDefList(0);
-            List<StoreDefinition> StoreDefitions = storeDefinitions.getValue();
+            // TODO: (refactor) once you've merged, I think there is a helper
+            // function to get StoreDef by name.
             StoreDefinition storeDefinition = null;
-            for(StoreDefinition def: StoreDefitions) {
+            for(StoreDefinition def: storeDefinitions.getValue()) {
                 if(def.getName().equals(storeName)) {
                     storeDefinition = def;
                     break;
@@ -83,7 +86,12 @@ public class ConsistencyCheck {
                 throw new Exception("No such store found: " + storeName);
             }
 
-            /* find the shorted retention policy */
+            // TODO: Does retentionDays need to be calculated for each url? I
+            // think the 'retentionDays==0' check is to make sure it is only
+            // determined once. This seems a bit awkward. Not sure how to clean
+            // up. But, maybe retentionDays should be read from each cluster's
+            // store def to confirm it is the same everywhere?
+            /* find the store retention policy */
             int storeRetentionDays = 0;
             if(storeDefinition.getRetentionDays() != null) {
                 storeRetentionDays = storeDefinition.getRetentionDays().intValue();
@@ -94,6 +102,10 @@ public class ConsistencyCheck {
             }
 
             /* make partitionId -> node mapping */
+            // TODO: (refactor) I think there is a helper method in the merged
+            // code that dose the following. If not, there should be. And, the
+            // Cluster would have excetped at construction if there were
+            // duplicate partition Ids, so that check is unnecessary.
             SortedMap<Integer, Node> partitionToNodeMap = new TreeMap<Integer, Node>();
             Collection<Node> nodes = cluster.getNodes();
             for(Node n: nodes) {
@@ -106,6 +118,9 @@ public class ConsistencyCheck {
             }
 
             /* find list of nodeId hosting partition */
+            // TODO: (refactor) Again, I think there is something that mostly
+            // does the following. Use (or add) common method and then convert
+            // the list of nodes to a list of PrefixNodes.
             List<Integer> partitionList = new RoutingStrategyFactory().updateRoutingStrategy(storeDefinition,
                                                                                              cluster)
                                                                       .getReplicatingPartitionList(partitionId);
@@ -142,6 +157,13 @@ public class ConsistencyCheck {
                 nodeEntriesMap.put(new PrefixNode(urlId, cluster.getNodeById(nodeId)), entries);
             }
 
+            // TODO: replicationFactor and requiredWrites are also a per
+            // cluster/store parameter (like retentionDays). Maybe it would be
+            // cleaner to capture retentionDays, replicationFactor, and
+            // requiredWrites for each store in some map<url,struct> and then
+            // post-process the struct afte the loop to check for invariants and
+            // determine aggregations (such as replicationFactor)?
+
             // calculate overall replication factor and required writes
             replicationFactor += storeDefinition.getReplicationFactor();
             if(requiredWrites == 0) {
@@ -151,6 +173,7 @@ public class ConsistencyCheck {
         }
     }
 
+    // TODO: This method is long. Anyway to break out some sub-parts?
     /**
      * Run consistency check on connected key-value iterators
      * 
@@ -165,18 +188,32 @@ public class ConsistencyCheck {
         keyVersionNodeSetMap = new HashMap<ByteArray, Map<Version, Set<PrefixNode>>>();
 
         // variables to sweep good keys on the fly
+        // TODO: any way to pull these two members into a class with a couple
+        // methods on them? I think that would break the complicated accounting
+        // logic below out from the logic of fetching and determining
+        // consistency level.
         Map<ByteArray, Set<Iterator<Pair<ByteArray, Versioned<byte[]>>>>> fullyFetchedKeys;
         fullyFetchedKeys = new HashMap<ByteArray, Set<Iterator<Pair<ByteArray, Versioned<byte[]>>>>>();
         Map<Iterator<Pair<ByteArray, Versioned<byte[]>>>, ByteArray> lastFetchedKey;
         lastFetchedKey = new HashMap<Iterator<Pair<ByteArray, Versioned<byte[]>>>, ByteArray>();
 
-        /* start fetch */
+        /* start fetches */
         boolean anyNodeHasNext;
         long consistentKeys = 0;
         ProgressReporter reporter = new ProgressReporter();
         do {
             anyNodeHasNext = false;
             /* for each iterator(fetch one key at a time) */
+            // TODO: (commentary) If I understand this logic correctly, then all
+            // servers are iterated over at the same rate, regardless of how far
+            // behind/ahead they are from one another. I think there is probably
+            // a simple test before nodeEntreis.hasNext() to determine if the
+            // node in question is ahead of all the others; if so, then
+            // 'continue'. Such a check would protect against ugly corner-cases
+            // in which some server is missing a ton of keys and so has giant
+            // gaps in its keyspace. I don't think this is worht worrying about,
+            // but I am noting this corner-case in case you think it ought to be
+            // documented or protected against.
             for(Map.Entry<PrefixNode, Iterator<Pair<ByteArray, Versioned<byte[]>>>> nodeEntriesMapEntry: nodeEntriesMap.entrySet()) {
                 PrefixNode node = nodeEntriesMapEntry.getKey();
                 Iterator<Pair<ByteArray, Versioned<byte[]>>> nodeEntries = nodeEntriesMapEntry.getValue();
@@ -248,6 +285,10 @@ public class ConsistencyCheck {
                             } else if(existingVersion.compare(version) == Occurred.CONCURRENTLY) {
                                 // put it into the node set
                             } else {
+                                // TODO: sufficient to just dump to System.err?
+                                // Does this warrant aborting? This feels like
+                                // an unreachable code path and so I'd prefer
+                                // abort...
                                 System.err.print("[ERROR]Two versions are not after each other nor currently(key, v1, v2)");
                                 System.err.print(key + ", " + existingVersion + ", " + version);
                             }
@@ -285,6 +326,12 @@ public class ConsistencyCheck {
 
         // print inconsistent keys
         if(verbose) {
+            // TODO: I don't think this should be wrapped in 'if(verbose)'. This
+            // is the rationale for running the checker and not printing these
+            // out would be pointless (I think). Could also consider specifying
+            // an output file for the bad keys to keep this important output
+            // distinct from all the other verbose output.
+            // TODO: (refactor) Should logger be used instead of system.out?
             System.out.println("TYPE,Store,ParId,Key,ServerSet,VersionTS,VectorClock[,ValueHash]");
             for(Map.Entry<ByteArray, Map<Version, Set<PrefixNode>>> entry: keyVersionNodeSetMap.entrySet()) {
                 ByteArray key = entry.getKey();
@@ -300,12 +347,22 @@ public class ConsistencyCheck {
         return stats;
     }
 
+    // TODO: (refactor) though not needed, a ConsistencyLevel of 'Ineligible',
+    // 'ignorable', or 'incomplete' may help with code clarity. You currently
+    // have comments and method names that use various words. Having a single
+    // specific word/enum will help with logic/code clarity.
     protected enum ConsistencyLevel {
         FULL,
         LATEST_CONSISTENT,
         INCONSISTENT
     }
 
+    // TODO: (refactor) I'd call this ClusterNode and I would have used the
+    // cluster's url or its name rather than maintain a counter to generate
+    // unique integer values for each such url/name. At least rename the method,
+    // but maybe keep the integer prefixId. Also, should the javadoc comment
+    // precede the class or the constructor? Your comment on the constructor
+    // seems more like the comment for the class.
     protected static class PrefixNode {
 
         private Integer prefixId;
@@ -368,6 +425,8 @@ public class ConsistencyCheck {
         }
     }
 
+    // TODO: (refactor) javadoc description of the constructor describes the
+    // class.
     protected static class HashedValue implements Version {
 
         final private Version innerVersion;
@@ -433,6 +492,14 @@ public class ConsistencyCheck {
                 expiredTimeMs = 0;
             } else {
                 long now = System.currentTimeMillis();
+                // TODO: (refactor) I prefer breaking conversions of different
+                // units onto separate lines. I also think we should not write
+                // any new code that uses "voldemort.Time" when TimeUnit exists
+                // and is standard java.
+                /*-
+                long expirationTimeS = TimeUnit.DAYS.toSeconds(days) - bufferTimeSeconds;
+                expiredTimeMs = now - TimeUnit.SECONDS.toMillis(expirationTimeS);
+                 */
                 expiredTimeMs = now - (Time.SECONDS_PER_DAY * days - bufferTimeSeconds)
                                 * Time.MS_PER_SECOND;
             }
@@ -545,6 +612,14 @@ public class ConsistencyCheck {
         help.append("  Optional:\n");
         help.append("    --verbose\n");
         help.append("    --help\n");
+        // TODO: Expand this note to more clearly explain when/why to use
+        // multiple. The use case is confirming that clusters replicated via
+        // external mechanisms can be checked for consistency.
+        // TODO: Do multiple URLs only work if the non-zoned clusters have the
+        // exact same number of partitions? If yes, then expand note. If no,
+        // then explain how to specify appropriate partitions per url. (I hope
+        // the answer is 'yes, tool only works on distinct clusters with exact
+        // same # of partitions'.
         help.append("  Note:\n");
         help.append("    When multiple urls are used, the versions are identified by value hashes, instead of VectorClocks\n");
         System.out.print(help.toString());
@@ -585,6 +660,11 @@ public class ConsistencyCheck {
         }
     }
 
+    // TODO: (refactor) It is hard to wrap my head around why a subset of
+    // methods/inner classes are static and another subset are non-static. Can
+    // all the static helper methods move to a ConsistencyCheckUtils.java
+    // class/namespace? Or, could the non-static members be refactored as a
+    // ConsistencyCheckWorker class?
     /**
      * Determine if a key version is invalid by comparing the version's
      * existance and required writes configuration
@@ -623,6 +703,10 @@ public class ConsistencyCheck {
         }
     }
 
+    // TODO: (refactor) Make a ConsistencyCheckCLI class and move main and all
+    // argument parsing to that class. That will move some distracting stuff
+    // out of this file and follow the pattern of RebalanceCLI and
+    // ConsistencyFixCLI.
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         OptionSet options = getParser().parse(args);

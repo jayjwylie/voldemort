@@ -79,6 +79,12 @@ public class ConsistencyCheckTest {
         assertEquals(v1.hashCode(), v2.hashCode());
         assertFalse(v1.hashCode() == v3.hashCode());
 
+        // TODO: also test the following:
+        assertFalse(v1.equals(v3));
+        assertFalse(v1.equals(null));
+        assertFalse(v1.equals(new Versioned<byte[]>(null)));
+        assertFalse(v1.equals(new Integer(0)));
+
         assertEquals(versioned1.getVersion(), ((ConsistencyCheck.HashedValue) v1).getInner());
         assertEquals(((ConsistencyCheck.HashedValue) v1).getValueHash(), v1.hashCode());
     }
@@ -97,6 +103,8 @@ public class ConsistencyCheckTest {
         assertFalse(rc1.isExpired(v1));
         assertFalse(rc1.isExpired(v2));
         assertFalse(rc1.isExpired(v3));
+        assertFalse(rc1.isExpired(v4));
+
         assertTrue(rc2.isExpired(v1));
         assertFalse(rc2.isExpired(v2));
         assertFalse(rc2.isExpired(v3));
@@ -121,6 +129,11 @@ public class ConsistencyCheckTest {
         assertEquals(4400, stats1.totalKeys);
     }
 
+    // TODO: This test needs some comments. I think there are at least 2tests in
+    // this one test method. There may be more, I cannot tell. Please break the
+    // different tests out somehow. Maybe there is a common setup method for
+    // distinct tests, or maybe there is a generic test method that takes some
+    // arguments.
     @Test
     public void testDetermineConsistency() {
         Node n1 = new Node(1, "localhost", 10000, 10001, 10002, 0, new ArrayList<Integer>());
@@ -141,6 +154,8 @@ public class ConsistencyCheckTest {
         setFourNodes.add(pn3);
         setFourNodes.add(pn4);
         Set<ConsistencyCheck.PrefixNode> setThreeNodes = new HashSet<ConsistencyCheck.PrefixNode>();
+        // TODO: Why is setFourNodes being manipulated again? Shouldn't this be
+        // setThreeNodes? I don't fully understand this test.
         setFourNodes.add(pn1);
         setFourNodes.add(pn2);
         setFourNodes.add(pn3);
@@ -197,6 +212,8 @@ public class ConsistencyCheckTest {
         assertEquals(ConsistencyCheck.ConsistencyLevel.INCONSISTENT,
                      ConsistencyCheck.determineConsistency(versionNodeSetMap, replicationFactor));
 
+        // TODO: I think this is just HashedValue? Or is it also vector clock
+        // too?
         // Version is HashedValue
         // Version is vector clock
         byte[] value1 = { 0, 1, 2, 3, 4 };
@@ -342,6 +359,11 @@ public class ConsistencyCheckTest {
 
     }
 
+    // TODO: Add a comment to this test method explaining that this is the
+    // test for .connect() and .execute() since there are not specific
+    // individual unit tests of these methods. Given this is effectively an
+    // integration test, a high level outline of what the test does would be
+    // good.
     @Test
     public void testOnePartitionEndToEnd() throws Exception {
         long now = System.currentTimeMillis();
@@ -374,6 +396,8 @@ public class ConsistencyCheckTest {
         VectorClock vc1 = new VectorClock();
         VectorClock vc2 = new VectorClock();
         VectorClock vc3 = new VectorClock();
+        // TODO: comments or TimeUnit.FOO.toDays() to make the times 5000 and
+        // 8900000 clear.
         vc1.incrementVersion(0, now); // [0:1]
         vc2.incrementVersion(1, now - 5000); // [1:1]
         vc3.incrementVersion(0, now - 89000000); // [0:1], over a day old
@@ -385,6 +409,7 @@ public class ConsistencyCheckTest {
         ArrayList<ByteArray> keysHashedToPar0 = new ArrayList<ByteArray>();
 
         // find store
+        // TODO: (refactor) this is (or should be) a helper method somewhere.
         Versioned<List<StoreDefinition>> storeDefinitions = adminClient.metadataMgmtOps.getRemoteStoreDefList(0);
         List<StoreDefinition> StoreDefitions = storeDefinitions.getValue();
         StoreDefinition storeDefinition = null;
@@ -475,6 +500,11 @@ public class ConsistencyCheckTest {
         adminClient.storeOps.updateEntries(2, STORE_NAME, n2store.iterator(), null);
         adminClient.storeOps.updateEntries(3, STORE_NAME, n3store.iterator(), null);
 
+        // TODO: Expand below comment and move it up higher. This should be
+        // above
+        // the setup code so I know what is being setup!
+
+        // TODO: is 'ignored' the same as 'ineligible'?
         // should have FULL:2(K4,K5), LATEST_CONSISTENT:1(K3),
         // INCONSISTENT:2(K6,K2), ignored(K1,K0)
         List<String> urls = new ArrayList<String>();
@@ -484,7 +514,15 @@ public class ConsistencyCheckTest {
         checker.connect();
         partitionStats = checker.execute();
 
+        // TODO: Document these assertions.
+        // TODO: Add a few more keys so that there 4 FULL, 1 LATEST_CONSISTENT,
+        // 2 INCONSISTENT and 3 ignored. This will make the assertions clearer
+        // and ensure you are asserting what you think you are. Currently there
+        // are 2 each of three distinct classes...
+        // 7 == total number of existing keys
+        // 2 == ? ignored or INCONSISTENT or FULL?
         assertEquals(7 - 2, partitionStats.totalKeys);
+        // FULL (2)? + LATEST_CONSISTENCY (1) = 3
         assertEquals(3, partitionStats.consistentKeys);
     }
 }
