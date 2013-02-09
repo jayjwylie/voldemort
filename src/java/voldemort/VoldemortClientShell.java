@@ -421,13 +421,15 @@ public class VoldemortClientShell {
             return m;
         } else if(o instanceof Number) {
             Number n = (Number) o;
-            if(o instanceof Integer) {
-                if(n.intValue() < Byte.MAX_VALUE)
+            if(o instanceof Long) {
+                if(n.longValue() < Byte.MAX_VALUE)
                     return n.byteValue();
-                else if(n.intValue() < Short.MAX_VALUE)
+                else if(n.longValue() < Short.MAX_VALUE)
                     return n.shortValue();
+                else if(n.longValue() < Integer.MAX_VALUE)
+                    return n.intValue();
                 else
-                    return n;
+                    return n.longValue();
             } else if(o instanceof Double) {
                 if(n.doubleValue() < Float.MAX_VALUE)
                     return n.floatValue();

@@ -13,7 +13,7 @@
       <type>string</type>
     </key-serializer>
     <value-serializer>
-      <type>string</type>
+      <type>java-serialization</type>
     </value-serializer>
   </store>
 </stores>

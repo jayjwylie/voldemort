@@ -32,16 +32,16 @@ import com.google.common.collect.ImmutableMap;
 public class JsonReaderTest extends TestCase {
 
     public void testObjects() {
-        assertParsed(ImmutableMap.of("1", 1, "2", 2), "{\"1\":1, \"2\":2}");
-        assertParsed(ImmutableMap.of("1", 1, "2", 2), "{\"1\"   : 1, \"2\": 2}");
+        assertParsed(ImmutableMap.of("1", 1L, "2", 2L), "{\"1\":1, \"2\":2}");
+        assertParsed(ImmutableMap.of("1", 1L, "2", 2L), "{\"1\"   : 1, \"2\": 2}");
         assertParsed(ImmutableMap.of(), "{}");
         assertParsed(ImmutableMap.of("h", ImmutableMap.of()), "{\"h\":{}}");
     }
 
     public void testArrays() {
         assertParsed(ImmutableList.of(), "[]");
-        assertParsed(ImmutableList.of(1), "[1]");
-        assertParsed(ImmutableList.of(1, ImmutableList.of(1)), "[1, [1]]");
+        assertParsed(ImmutableList.of(1L), "[1]");
+        assertParsed(ImmutableList.of(1L, ImmutableList.of(1L)), "[1, [1]]");
     }
 
     public void testStrings() {
@@ -72,8 +72,8 @@ public class JsonReaderTest extends TestCase {
     }
 
     public void testNumbers() {
-        assertParsed(-1, "-1");
-        assertParsed(1, "1");
+        assertParsed(-1L, "-1");
+        assertParsed(1L, "1");
         assertParsedDouble(1.1d, "1.1");
         assertParsedDouble(0.12304d, "0.12304");
         assertParsedDouble(1e10d, "1e10");
@@ -105,13 +105,13 @@ public class JsonReaderTest extends TestCase {
     public void testParseMultiple() throws Exception {
         JsonReader reader = new JsonReader(new StringReader("1{} {} [2]\"3\" "));
         assertTrue(reader.hasMore());
-        assertEquals(1, reader.read());
+        assertEquals(1L, reader.read());
         assertTrue(reader.hasMore());
         assertEquals(ImmutableMap.of(), reader.read());
         assertTrue(reader.hasMore());
         assertEquals(ImmutableMap.of(), reader.read());
         assertTrue(reader.hasMore());
-        assertEquals(ImmutableList.of(2), reader.read());
+        assertEquals(ImmutableList.of(2L), reader.read());
         assertTrue(reader.hasMore());
         assertEquals("3", reader.read());
         assertTrue(!reader.hasMore());
@@ -123,10 +123,10 @@ public class JsonReaderTest extends TestCase {
                                                       "LxO45",
                                                       true,
                                                       "l1jBAJTSO",
-                                                      ImmutableList.of(3245847,
-                                                                       4,
+                                                      ImmutableList.of(3245847L,
+                                                                       4L,
                                                                        ImmutableList.of(),
-                                                                       3988)),
+                                                                       3988L)),
                                       ImmutableMap.of(),
                                       ImmutableMap.of("", "sk7QzU"),
                                       "0lMsJq"), "[{\"\":false, \"LxO45\":true,"

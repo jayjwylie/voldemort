@@ -248,7 +248,7 @@ public class JsonReader {
 
     public Number readNumber() {
         skipWhitespace();
-        int intPiece = readInt();
+        long intPiece = readLong();
 
         // if int is all we have, return it
         if(isTerminator(current()))
@@ -261,7 +261,7 @@ public class JsonReader {
         if(current() == 'e' || current() == 'E') {
             next();
             skipIf('+');
-            int frac = readInt();
+            long frac = readLong();
             doublePiece *= Math.pow(10, frac);
         }
         if(isTerminator(current()))
@@ -276,9 +276,9 @@ public class JsonReader {
                || ch == ',' || ch == -1;
     }
 
-    public int readInt() {
+    public long readLong() {
         skipWhitespace();
-        int val = 0;
+        long val = 0;
         boolean isPositive;
         if(current() == '-') {
             isPositive = false;
