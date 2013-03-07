@@ -1433,7 +1433,8 @@ public class AdminClient {
                                           boolean fetchValues,
                                           boolean fetchMasterEntries,
                                           Cluster initialCluster,
-                                          long skipRecords) throws IOException {
+                                          long skipRecords,
+                                          long maxRecords) throws IOException {
             HashMap<Integer, List<Integer>> filteredReplicaToPartitionList = Maps.newHashMap();
             if(fetchMasterEntries) {
                 if(!replicaToPartitionList.containsKey(0)) {
@@ -1448,7 +1449,8 @@ public class AdminClient {
                                                                                                                     .setFetchValues(fetchValues)
                                                                                                                     .addAllReplicaToPartition(ProtoUtils.encodePartitionTuple(filteredReplicaToPartitionList))
                                                                                                                     .setStore(storeName)
-                                                                                                                    .setSkipRecords(skipRecords);
+                                                                                                                    .setSkipRecords(skipRecords)
+                                                                                                                    .setMaxRecords(maxRecords);
 
             try {
                 if(filter != null) {
@@ -1575,14 +1577,16 @@ public class AdminClient {
                                                                          List<Integer> partitionList,
                                                                          VoldemortFilter filter,
                                                                          boolean fetchMasterEntries,
-                                                                         long skipRecords) {
+                                                                         long skipRecords,
+                                                                         long maxRecords) {
             return fetchEntries(nodeId,
                                 storeName,
                                 helperOps.getReplicaToPartitionMap(nodeId, storeName, partitionList),
                                 filter,
                                 fetchMasterEntries,
                                 null,
-                                skipRecords);
+                                skipRecords,
+                                maxRecords);
         }
 
         /**
@@ -1604,8 +1608,12 @@ public class AdminClient {
                                                                          List<Integer> partitionList,
                                                                          VoldemortFilter filter,
                                                                          boolean fetchMasterEntries) {
-            return fetchEntries(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0);
+            return fetchEntries(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0, 0);
         }
+
+        // TODO: " HashMap<Integer, List<Integer>> replicaToPartitionList," is a
+        // confusing/opaque argument. Can this be made a type, or even
+        // unrolled/simplified?
 
         // TODO: The use of "Pair" in the return for a fundamental type is
         // awkward. We should have a core KeyValue type that effectively wraps
@@ -1646,7 +1654,8 @@ public class AdminClient {
                                                                          VoldemortFilter filter,
                                                                          boolean fetchMasterEntries,
                                                                          Cluster initialCluster,
-                                                                         long skipRecords) {
+                                                                         long skipRecords,
+                                                                         long maxRecords) {
 
             Node node = AdminClient.this.getAdminClientCluster().getNodeById(nodeId);
             final SocketDestination destination = new SocketDestination(node.getHost(),
@@ -1664,7 +1673,8 @@ public class AdminClient {
                                      true,
                                      fetchMasterEntries,
                                      initialCluster,
-                                     skipRecords);
+                                     skipRecords,
+                                     maxRecords);
             } catch(IOException e) {
                 helperOps.close(sands.getSocket());
                 socketPool.checkin(destination, sands);
@@ -1791,14 +1801,16 @@ public class AdminClient {
                                              List<Integer> partitionList,
                                              VoldemortFilter filter,
                                              boolean fetchMasterEntries,
-                                             long skipRecords) {
+                                             long skipRecords,
+                                             long maxRecords) {
             return fetchKeys(nodeId,
                              storeName,
                              helperOps.getReplicaToPartitionMap(nodeId, storeName, partitionList),
                              filter,
                              fetchMasterEntries,
                              null,
-                             skipRecords);
+                             skipRecords,
+                             maxRecords);
         }
 
         /**
@@ -1820,7 +1832,7 @@ public class AdminClient {
                                              List<Integer> partitionList,
                                              VoldemortFilter filter,
                                              boolean fetchMasterEntries) {
-            return fetchKeys(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0);
+            return fetchKeys(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0, 0);
         }
 
         /**
@@ -1844,7 +1856,8 @@ public class AdminClient {
                                              VoldemortFilter filter,
                                              boolean fetchMasterEntries,
                                              Cluster initialCluster,
-                                             long skipRecords) {
+                                             long skipRecords,
+                                             long maxRecords) {
             Node node = AdminClient.this.getAdminClientCluster().getNodeById(nodeId);
             final SocketDestination destination = new SocketDestination(node.getHost(),
                                                                         node.getAdminPort(),
@@ -1861,7 +1874,8 @@ public class AdminClient {
                                      false,
                                      fetchMasterEntries,
                                      initialCluster,
-                                     skipRecords);
+                                     skipRecords,
+                                     maxRecords);
             } catch(IOException e) {
                 helperOps.close(sands.getSocket());
                 socketPool.checkin(destination, sands);
