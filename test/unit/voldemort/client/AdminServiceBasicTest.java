@@ -142,7 +142,9 @@ public class AdminServiceBasicTest {
 
         Properties adminProperties = new Properties();
         adminProperties.setProperty("max_connections", "20");
-        adminClient = new AdminClient(cluster, new AdminClientConfig(adminProperties));
+        adminClient = new AdminClient(cluster,
+                                      new AdminClientConfig(adminProperties),
+                                      new ClientConfig());
     }
 
     /**
@@ -157,7 +159,7 @@ public class AdminServiceBasicTest {
 
     @After
     public void tearDown() throws IOException {
-        adminClient.stop();
+        adminClient.close();
         for(VoldemortServer server: servers) {
             ServerTestUtils.stopVoldemortServer(server);
         }
