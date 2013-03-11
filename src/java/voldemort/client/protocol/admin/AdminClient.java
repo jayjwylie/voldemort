@@ -2155,7 +2155,6 @@ public class AdminClient {
                 store = adminStoreClient.getSocketStore(nodeId, storeName);
 
             } catch(Exception e) {
-                AdminClient.this.close();
                 throw new VoldemortException(e);
             }
 
@@ -2166,7 +2165,6 @@ public class AdminClient {
                     ByteArray key;
                     List<Versioned<byte[]>> value = null;
                     if(!keys.hasNext()) {
-                        AdminClient.this.close();
                         return endOfData();
                     } else {
                         key = keys.next();
