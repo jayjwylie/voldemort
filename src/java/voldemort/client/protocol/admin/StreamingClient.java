@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2009 LinkedIn, Inc
+ * Copyright 2008-2013 LinkedIn, Inc
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.log4j.Logger;
 
 import voldemort.VoldemortException;
+import voldemort.client.ClientConfig;
 import voldemort.client.protocol.RequestFormatType;
 import voldemort.client.protocol.pb.ProtoUtils;
 import voldemort.client.protocol.pb.VAdminProto;
@@ -291,7 +292,7 @@ public class StreamingClient {
 
         logger.info("Initializing a streaming session");
         adminClientConfig = new AdminClientConfig();
-        adminClient = new AdminClient(bootstrapURL, adminClientConfig);
+        adminClient = new AdminClient(bootstrapURL, adminClientConfig, new ClientConfig());
         this.checkpointCallback = checkpointCallback;
         this.recoveryCallback = recoveryCallback;
         this.allowMerge = allowMerge;
@@ -371,7 +372,7 @@ public class StreamingClient {
                 nodeIdStoreInitialized.put(new Pair(store, node.getId()), false);
 
                 remoteStoreDefs = adminClient.metadataMgmtOps.getRemoteStoreDefList(node.getId())
-                                                      .getValue();
+                                                             .getValue();
 
             } catch(Exception e) {
                 close(sands.getSocket());
