@@ -1432,6 +1432,8 @@ public class AdminServiceBasicTest {
         entry = results.next();
         assertFalse("There should not be more results", results.hasNext());
         assertEquals("Not the right key", queryKeys.get(0), entry.getKey());
+        assertFalse("There should not be exception", entry.hasException());
+        assertTrue("There should be values", entry.hasValues());
         assertNotNull("Response should be non-null", entry.getValues());
         assertEquals("Value should be empty list", 0, entry.getValues().size());
         assertNull("There should not be exception", entry.getException());
@@ -1444,6 +1446,8 @@ public class AdminServiceBasicTest {
         entry = results.next();
         assertFalse("There should not be more results", results.hasNext());
         assertEquals("Not the right key", queryKeys.get(0), entry.getKey());
+        assertTrue("There should be exception", entry.hasException());
+        assertFalse("There should not be values", entry.hasValues());
         assertNull("Value should be null", entry.getValues());
         assertTrue("There should be InvalidMetadataException exception",
                    entry.getException() instanceof InvalidMetadataException);
@@ -1456,6 +1460,8 @@ public class AdminServiceBasicTest {
         entry = results.next();
         assertFalse("There should not be more results", results.hasNext());
         assertEquals("Not the right key", queryKeys.get(0), entry.getKey());
+        assertTrue("There should be exception", entry.hasException());
+        assertFalse("There should not be values", entry.hasValues());
         assertNull("Value should be null", entry.getValues());
         assertTrue("There should be InvalidMetadataException exception",
                    entry.getException() instanceof InvalidMetadataException);
@@ -1468,9 +1474,10 @@ public class AdminServiceBasicTest {
         assertTrue("Results should not be empty", results.hasNext());
         entry = results.next();
         assertFalse("There should not be more results", results.hasNext());
+        assertFalse("There should not be exception", entry.hasException());
+        assertTrue("There should be values", entry.hasValues());
         assertEquals("Not the right key", queryKeys.get(0), entry.getKey());
         assertEquals("Value should be empty list", 0, entry.getValues().size());
-        assertNull("There should not be exception", entry.getException());
 
         // test empty request
         queryKeys = new ArrayList<ByteArray>();
@@ -1485,6 +1492,8 @@ public class AdminServiceBasicTest {
         assertTrue("Results should not be empty", results.hasNext());
         entry = results.next();
         assertFalse("There should not be more results", results.hasNext());
+        assertTrue("There should be exception", entry.hasException());
+        assertFalse("There should not be values", entry.hasValues());
         assertNull("Value should be null", entry.getValues());
         assertTrue("There should be IllegalArgumentException exception",
                    entry.getException() instanceof IllegalArgumentException);
