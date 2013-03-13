@@ -42,8 +42,15 @@ import voldemort.store.system.SystemStoreConstants;
 import voldemort.utils.ByteArray;
 import voldemort.utils.EventThrottler;
 import voldemort.utils.NetworkClassLoader;
+import voldemort.utils.Time;
 import voldemort.xml.ClusterMapper;
 
+import com.google.protobuf.Message;
+
+/**
+ * Base class for all key/entry stream fetching handlers.
+ * 
+ */
 public abstract class FetchStreamRequestHandler implements StreamRequestHandler {
 
     protected final VAdminProto.FetchPartitionEntriesRequest request;
@@ -66,15 +73,13 @@ public abstract class FetchStreamRequestHandler implements StreamRequestHandler 
 
     protected final StreamingStats.Operation operation;
 
-    protected long counter;
+    protected long scanned; // Read from disk.
 
-    protected long skipRecords;
+    protected long fetched; // Returned to caller.
 
-    protected long maxRecords;
+    protected final long recordsPerPartition;
 
-    protected int fetched;
-
-    protected final long startTime;
+    protected final long startTimeMs;
 
     protected final Logger logger = Logger.getLogger(getClass());
 
@@ -119,16 +124,13 @@ public abstract class FetchStreamRequestHandler implements StreamRequestHandler 
         } else {
             this.filter = new DefaultVoldemortFilter();
         }
-        this.startTime = System.currentTimeMillis();
-        this.counter = 0;
+        this.startTimeMs = System.currentTimeMillis();
+        this.scanned = 0;
 
-        this.skipRecords = 1;
-        if(request.hasSkipRecords() && request.getSkipRecords() >= 0) {
-            this.skipRecords = request.getSkipRecords() + 1;
-        }
-        this.maxRecords = Long.MAX_VALUE;
-        if(request.hasMaxRecords() && request.getMaxRecords() > 0) {
-            this.maxRecords = request.getMaxRecords();
+        if(request.hasRecordsPerPartition() && request.getRecordsPerPartition() > 0) {
+            this.recordsPerPartition = request.getRecordsPerPartition();
+        } else {
+            this.recordsPerPartition = 0;
         }
         this.fetchOrphaned = request.hasFetchOrphaned() && request.getFetchOrphaned();
     }
@@ -143,18 +145,21 @@ public abstract class FetchStreamRequestHandler implements StreamRequestHandler 
         return def;
     }
 
+    @Override
     public final StreamRequestDirection getDirection() {
         return StreamRequestDirection.WRITING;
     }
 
+    @Override
     public void close(DataOutputStream outputStream) throws IOException {
-        logger.info("Successfully scanned " + counter + " tuples, fetched " + fetched
+        logger.info("Successfully scanned " + scanned + " tuples, fetched " + fetched
                     + " tuples for store '" + storageEngine.getName() + "' in "
-                    + ((System.currentTimeMillis() - startTime) / 1000) + " s");
+                    + ((System.currentTimeMillis() - startTimeMs) / 1000) + " s");
 
         ProtoUtils.writeEndOfStream(outputStream);
     }
 
+    @Override
     public final void handleError(DataOutputStream outputStream, VoldemortException e)
             throws IOException {
         VAdminProto.FetchPartitionEntriesResponse response = VAdminProto.FetchPartitionEntriesResponse.newBuilder()
@@ -165,6 +170,50 @@ public abstract class FetchStreamRequestHandler implements StreamRequestHandler 
         ProtoUtils.writeMessage(outputStream, response);
         logger.error("handleFetchPartitionEntries failed for request(" + request.toString() + ")",
                      e);
+    }
+
+    /**
+     * Progress info message
+     * 
+     * @param tag Message that precedes progress info. Indicate 'keys' or
+     *        'entries'.
+     */
+    protected void progressInfoMessage(final String tag) {
+        if(logger.isInfoEnabled()) {
+            long totalTimeS = (System.currentTimeMillis() - startTimeMs) / Time.MS_PER_SECOND;
+
+            logger.info(tag + " : scanned " + scanned + " and fetched " + fetched + " for store '"
+                        + storageEngine.getName() + "' replicaToPartitionList:"
+                        + replicaToPartitionList + " in " + totalTimeS + " s");
+        }
+    }
+
+    /**
+     * Helper method to send message on outputStream and account for network
+     * time stats.
+     * 
+     * @param outputStream
+     * @param message
+     * @throws IOException
+     */
+    protected void sendMessage(DataOutputStream outputStream, Message message) throws IOException {
+        long startNs = System.nanoTime();
+        ProtoUtils.writeMessage(outputStream, message);
+        if(streamStats != null) {
+            streamStats.reportNetworkTime(operation, System.nanoTime() - startNs);
+        }
+    }
+
+    /**
+     * Helper method to track storage operations & time via StreamingStats.
+     * 
+     * @param startNs
+     */
+    protected void reportStorageOpTime(long startNs) {
+        if(streamStats != null) {
+            streamStats.reportStreamingScan(operation);
+            streamStats.reportStorageTime(operation, System.nanoTime() - startNs);
+        }
     }
 
 }

@@ -1445,8 +1445,7 @@ public class AdminClient {
                                           boolean fetchValues,
                                           boolean fetchMasterEntries,
                                           Cluster initialCluster,
-                                          long skipRecords,
-                                          long maxRecords) throws IOException {
+                                          long recordsPerPartition) throws IOException {
             HashMap<Integer, List<Integer>> filteredReplicaToPartitionList = Maps.newHashMap();
             if(fetchMasterEntries) {
                 if(!replicaToPartitionList.containsKey(0)) {
@@ -1461,8 +1460,7 @@ public class AdminClient {
                                                                                                                     .setFetchValues(fetchValues)
                                                                                                                     .addAllReplicaToPartition(ProtoUtils.encodePartitionTuple(filteredReplicaToPartitionList))
                                                                                                                     .setStore(storeName)
-                                                                                                                    .setSkipRecords(skipRecords)
-                                                                                                                    .setMaxRecords(maxRecords);
+                                                                                                                    .setRecordsPerPartition(recordsPerPartition);
 
             try {
                 if(filter != null) {
@@ -1577,7 +1575,6 @@ public class AdminClient {
          * @param filter Custom filter implementation to filter out entries
          *        which should not be fetched.
          * @param fetchMasterEntries Fetch an entry only if master replica
-         * @param skipRecords Number of records to skip
          * @return An iterator which allows entries to be streamed as they're
          *         being iterated over.
          */
@@ -1586,16 +1583,14 @@ public class AdminClient {
                                                                          List<Integer> partitionList,
                                                                          VoldemortFilter filter,
                                                                          boolean fetchMasterEntries,
-                                                                         long skipRecords,
-                                                                         long maxRecords) {
+                                                                         long recordsPerPartition) {
             return fetchEntries(nodeId,
                                 storeName,
                                 helperOps.getReplicaToPartitionMap(nodeId, storeName, partitionList),
                                 filter,
                                 fetchMasterEntries,
                                 null,
-                                skipRecords,
-                                maxRecords);
+                                recordsPerPartition);
         }
 
         /**
@@ -1617,12 +1612,13 @@ public class AdminClient {
                                                                          List<Integer> partitionList,
                                                                          VoldemortFilter filter,
                                                                          boolean fetchMasterEntries) {
-            return fetchEntries(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0, 0);
+            return fetchEntries(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0);
         }
 
-        // TODO: " HashMap<Integer, List<Integer>> replicaToPartitionList," is a
+        // TODO: "HashMap<Integer, List<Integer>> replicaToPartitionList" is a
         // confusing/opaque argument. Can this be made a type, or even
-        // unrolled/simplified?
+        // unrolled/simplified? The replicaType is pretty much meaningless
+        // anyhow.
 
         // TODO: The use of "Pair" in the return for a fundamental type is
         // awkward. We should have a core KeyValue type that effectively wraps
@@ -1653,7 +1649,6 @@ public class AdminClient {
          *        decision to fetch entries. This is important during
          *        rebalancing where-in we want to fetch keys using an older
          *        metadata compared to the new one.
-         * @param skipRecords Number of records to skip
          * @return An iterator which allows entries to be streamed as they're
          *         being iterated over.
          */
@@ -1663,8 +1658,7 @@ public class AdminClient {
                                                                          VoldemortFilter filter,
                                                                          boolean fetchMasterEntries,
                                                                          Cluster initialCluster,
-                                                                         long skipRecords,
-                                                                         long maxRecords) {
+                                                                         long recordsPerPartition) {
 
             Node node = AdminClient.this.getAdminClientCluster().getNodeById(nodeId);
             final SocketDestination destination = new SocketDestination(node.getHost(),
@@ -1682,8 +1676,7 @@ public class AdminClient {
                                      true,
                                      fetchMasterEntries,
                                      initialCluster,
-                                     skipRecords,
-                                     maxRecords);
+                                     recordsPerPartition);
             } catch(IOException e) {
                 helperOps.close(sands.getSocket());
                 socketPool.checkin(destination, sands);
@@ -1801,7 +1794,6 @@ public class AdminClient {
          * @param filter Custom filter implementation to filter out entries
          *        which should not be fetched.
          * @param fetchMasterEntries Fetch a key only if master replica
-         * @param skipRecords Number of keys to skip
          * @return An iterator which allows keys to be streamed as they're being
          *         iterated over.
          */
@@ -1810,16 +1802,14 @@ public class AdminClient {
                                              List<Integer> partitionList,
                                              VoldemortFilter filter,
                                              boolean fetchMasterEntries,
-                                             long skipRecords,
-                                             long maxRecords) {
+                                             long recordsPerPartition) {
             return fetchKeys(nodeId,
                              storeName,
                              helperOps.getReplicaToPartitionMap(nodeId, storeName, partitionList),
                              filter,
                              fetchMasterEntries,
                              null,
-                             skipRecords,
-                             maxRecords);
+                             recordsPerPartition);
         }
 
         /**
@@ -1841,7 +1831,7 @@ public class AdminClient {
                                              List<Integer> partitionList,
                                              VoldemortFilter filter,
                                              boolean fetchMasterEntries) {
-            return fetchKeys(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0, 0);
+            return fetchKeys(nodeId, storeName, partitionList, filter, fetchMasterEntries, 0);
         }
 
         /**
@@ -1856,7 +1846,6 @@ public class AdminClient {
          * @param filter Custom filter
          * @param initialCluster Cluster to use for selecting a key. If null,
          *        use the default metadata from the metadata store
-         * @param skipRecords Number of records to skip [ Used for sampling ]
          * @return Returns an iterator of the keys
          */
         public Iterator<ByteArray> fetchKeys(int nodeId,
@@ -1865,8 +1854,7 @@ public class AdminClient {
                                              VoldemortFilter filter,
                                              boolean fetchMasterEntries,
                                              Cluster initialCluster,
-                                             long skipRecords,
-                                             long maxRecords) {
+                                             long recordsPerPartition) {
             Node node = AdminClient.this.getAdminClientCluster().getNodeById(nodeId);
             final SocketDestination destination = new SocketDestination(node.getHost(),
                                                                         node.getAdminPort(),
@@ -1883,8 +1871,7 @@ public class AdminClient {
                                      false,
                                      fetchMasterEntries,
                                      initialCluster,
-                                     skipRecords,
-                                     maxRecords);
+                                     recordsPerPartition);
             } catch(IOException e) {
                 helperOps.close(sands.getSocket());
                 socketPool.checkin(destination, sands);

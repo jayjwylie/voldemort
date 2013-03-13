@@ -974,7 +974,6 @@ public class AdminServiceRequestHandler implements RequestHandler {
                                                                                                                                      filter,
                                                                                                                                      false,
                                                                                                                                      initialCluster,
-                                                                                                                                     0,
                                                                                                                                      0);
                                 long numTuples = 0;
                                 long startTime = System.currentTimeMillis();
@@ -1342,6 +1341,7 @@ public class AdminServiceRequestHandler implements RequestHandler {
      *        returns
      * @return True if the buffer holds a complete request, false otherwise
      */
+    @Override
     public boolean isCompleteRequest(ByteBuffer buffer) {
         DataInputStream inputStream = new DataInputStream(new ByteBufferBackedInputStream(buffer));
 
