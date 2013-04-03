@@ -48,23 +48,26 @@ import voldemort.versioning.VectorClock;
 public class HttpPutRequestExecutor implements Runnable {
 
     private MessageEvent putRequestMessageEvent;
+    // TODO: storeClient ought to be private or protected? and final?
     DynamicTimeoutStoreClient<ByteArray, byte[]> storeClient;
     private final Logger logger = Logger.getLogger(HttpPutRequestExecutor.class);
     private final CompositeVoldemortRequest<ByteArray, byte[]> putRequestObject;
     private final long startTimestampInNs;
     private final StoreStats coordinatorPerfStats;
 
+    // TODO: Strong dislike of dummy constructors for noop operations as part of
+    // main class. NoopHttpRequestHandler is only invoker. See inner class I
+    // added to NoopHttpRequestHandler for another option on how to do this.
     /**
      * Dummy constructor invoked during a Noop Put operation
      * 
      * @param requestEvent MessageEvent used to write the response
      */
-    public HttpPutRequestExecutor(MessageEvent requestEvent) {
-        this.putRequestMessageEvent = requestEvent;
-        this.putRequestObject = null;
-        this.startTimestampInNs = 0;
-        this.coordinatorPerfStats = null;
-    }
+    /*
+     * public HttpPutRequestExecutor(MessageEvent requestEvent) {
+     * this.putRequestMessageEvent = requestEvent; this.putRequestObject = null;
+     * this.startTimestampInNs = 0; this.coordinatorPerfStats = null; }
+     */
 
     /**
      * 
@@ -116,6 +119,12 @@ public class HttpPutRequestExecutor implements Runnable {
         this.putRequestMessageEvent.getChannel().write(response);
     }
 
+    // TODO: Seems like there could be a common base clasee
+    // "HttpRequestExecutor" with abstract methods "doOperation" and
+    // "writeResponse". Then, the run method could (possibly) be implemented in
+    // the base class and be try {doOperation(); writeResponse(); } catch ....
+    // Not sure if all catch cluases can be unified, but it seems worth it to
+    // make code more consistent across Http*RequestExectuors.
     @Override
     public void run() {
 
@@ -144,6 +153,7 @@ public class HttpPutRequestExecutor implements Runnable {
                                          errorDescription);
 
         } catch(StoreTimeoutException timeoutException) {
+            // TODO: Is this really GET time out?
             String errorDescription = "GET Request timed out: " + timeoutException.getMessage();
             logger.error(errorDescription);
             RESTErrorHandler.handleError(REQUEST_TIMEOUT,

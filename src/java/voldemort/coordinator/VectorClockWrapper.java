@@ -22,6 +22,8 @@ import java.util.List;
 import voldemort.versioning.ClockEntry;
 import voldemort.versioning.VectorClock;
 
+// TODO: Clarify comment a bit more to note that this is the minimum class
+// necessary to allow ObjectMapper to do what ObjectMapper does.
 /**
  * A wrapper for Vector clock used for serialization purposes. This Wrapper is
  * then converted to a JSON string which in turn gets embedded in a HTTP header

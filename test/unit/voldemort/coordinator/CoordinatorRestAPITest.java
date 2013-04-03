@@ -247,6 +247,13 @@ public class CoordinatorRestAPITest {
         return responseObj;
     }
 
+    // TODO: add test doGetAll. Should cover no keys that exist, some keys that
+    // exist, and all keys exists.
+
+    // TODO: add test for malformed operation? I.e., requestObject is null
+    // and/or requestObject.getOperationType() less than 1 (GET_OP_CODE) or more
+    // than 4 (GET_ALL_OPCODE_).
+
     @Test
     public void testReadAfterWrite() {
         String key = "Which_Imperial_IPA_do_I_want_to_drink";

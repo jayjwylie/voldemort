@@ -48,6 +48,8 @@ import voldemort.utils.ByteArray;
 import voldemort.versioning.VectorClock;
 import voldemort.versioning.Versioned;
 
+// TODO: Is the choice of term HTTP vs REST conscious in the various class
+// names? I am not sure why some are REST and some are Http?
 /**
  * A class to handle the HTTP request and execute the same on behalf of the thin
  * client.
@@ -286,6 +288,7 @@ public class VoldemortHttpRequestHandler extends SimpleChannelUpstreamHandler {
                                                             VectorClockWrapper.class);
             vc = new VectorClock(vcWrapper.getVersions(), vcWrapper.getTimestamp());
         } catch(NullPointerException npe) {
+            // TODO: WTF? swallow NPE?
             // npe.printStackTrace();
         } catch(JsonParseException e) {
             // TODO Auto-generated catch block

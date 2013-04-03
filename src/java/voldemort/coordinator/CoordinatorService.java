@@ -314,6 +314,7 @@ public class CoordinatorService extends AbstractService {
         });
     }
 
+    // TODO: Rename first three of these to have 'netty' as prefix.
     @JmxGetter(name = "numberOfActiveThreads", description = "The number of active Netty worker threads.")
     public int getNumberOfActiveThreads() {
         return this.workerPool.getActiveCount();
@@ -329,6 +330,12 @@ public class CoordinatorService extends AbstractService {
         return this.workerPool.getQueue().size();
     }
 
+    // TODO: Why do we need these perf stats exposed like this? Don't we already
+    // have ways of exposing these stats? If we have to go down this path, then
+    // expose all the same stats we are used to (e.g., q95 and QPS). And, are
+    // these stats store specific? Or, do they aggregate across all stores?
+    // Also, make sure all descriptions are complete (i.e., not "") and correct
+    // (i.e., fix incorrect use of "GET" in some of the below).
     @JmxGetter(name = "averageGetCompletionTimeInMs", description = "The avg. time in ms for GET calls to complete.")
     public double getAverageGetCompletionTimeInMs() {
         return this.coordinatorPerfStats.getAvgTimeInMs(Tracked.GET);

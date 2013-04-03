@@ -42,6 +42,10 @@ import voldemort.versioning.VectorClock;
 import voldemort.versioning.Version;
 import voldemort.versioning.Versioned;
 
+// TODO: Is hte HttpStore related to all the Http classes for coordinator/fat
+// client? I don't think so... So 'http' and 'rest' are used somewhat
+// ambiguously in code base (imho). Also, this class seems to only be used for
+// testing, yet is under src rather than test/common/voldemort/store/.
 /**
  * A remote store client that transmits operations via HTTP and interacts with
  * the VoldemortHttpServer.

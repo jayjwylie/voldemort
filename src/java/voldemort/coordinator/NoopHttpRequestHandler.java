@@ -33,6 +33,13 @@ import voldemort.versioning.Versioned;
  */
 public class NoopHttpRequestHandler extends VoldemortHttpRequestHandler {
 
+    public class NoopHttpPutRequestExecutor extends HttpPutRequestExecutor {
+
+        NoopHttpPutRequestExecutor(MessageEvent requestEvent) {
+            super(null, requestEvent, null, 0, null);
+        }
+    }
+
     public NoopHttpRequestHandler() {}
 
     @Override
@@ -50,7 +57,7 @@ public class NoopHttpRequestHandler extends VoldemortHttpRequestHandler {
                 getExecutor.writeResponse(responseVersioned);
                 break;
             case VoldemortOpCode.PUT_OP_CODE:
-                HttpPutRequestExecutor putRequestExecutor = new HttpPutRequestExecutor(e);
+                HttpPutRequestExecutor putRequestExecutor = new NoopHttpPutRequestExecutor(e);
                 putRequestExecutor.writeResponse(new VectorClock());
                 break;
             default:

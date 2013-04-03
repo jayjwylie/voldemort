@@ -38,6 +38,14 @@ import voldemort.versioning.Versioned;
 
 import com.google.common.collect.Maps;
 
+// TODO: I don't think this class is well-named. This class seems to meet some
+// specific needs of the FatClient in contrast to being some general flexible
+// storeclient interface with flexible timeout settings. The per-call timeout
+// facility is also opaque --- the CompositeVoldemortRequest actually has the
+// timeout information. Are all the interfaces inherited from DefaultStoreClient
+// usable from this class? Not really sure how to reason about this class.
+// sorry...
+
 /**
  * A special store client to invoke Voldemort operations with the following new
  * features: 1) Per call timeout facility 2) Ability to disable resolution per

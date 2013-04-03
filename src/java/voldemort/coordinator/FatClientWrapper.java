@@ -251,6 +251,10 @@ public class FatClientWrapper {
                                              // client
     }
 
+    // TODO: these JmxGetter names seem the same as for CoodrinatorService. Is
+    // that OK? Seems somewhat unclear? why not prefix with "fatClient" or even
+    // "fatty"?
+
     @JmxGetter(name = "numberOfActiveThreads", description = "The number of active Fat client wrapper threads.")
     public int getNumberOfActiveThreads() {
         return this.fatClientExecutor.getActiveCount();
