@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import org.apache.commons.io.FileUtils;
@@ -99,10 +100,15 @@ public class RebalanceClusterUtils {
         for(int numTries = 0; numTries < maxTriesRebalancing; numTries++) {
             Cluster nextCluster = targetCluster;
 
+            // TODO: Add argument for this option...
+            nextCluster = balancePrimaryPartitionsPerZone(nextCluster, storeDefs);
+
             if(maxContiguousPartitionsPerZone > 0) {
                 nextCluster = repeatedlyBalanceContiguousPartitionsPerZone(nextCluster,
                                                                            maxContiguousPartitionsPerZone);
             }
+
+            // TODO: Add option & code for contiguous per node.
 
             if(!generateDisablePrimaryBalancing) {
                 nextCluster = balancePrimaryPartitionsPerNode(nextCluster,
@@ -194,6 +200,83 @@ public class RebalanceClusterUtils {
         return numPartitionsPerNodePerZone;
     }
 
+    // TODO: this one
+    public static Pair<HashMap<Node, Integer>, HashMap<Node, Integer>> getDonorsAndStealersForBalancedZones(final Cluster targetCluster) {
+        HashMap<Integer, List<Integer>> numPartitionsPerNodeAndZone = getBalancedNumberOfPrimaryPartitionsPerNodeAndZone(targetCluster);
+
+        HashMap<Node, Integer> donorNodes = Maps.newHashMap();
+        HashMap<Node, Integer> stealerNodes = Maps.newHashMap();
+
+        HashMap<Integer, Integer> numNodesAssignedInZone = Maps.newHashMap();
+        for(Integer zoneId: targetCluster.getZoneIds()) {
+            numNodesAssignedInZone.put(zoneId, 0);
+        }
+        for(Node node: targetCluster.getNodes()) {
+            int zoneId = node.getZoneId();
+
+            int offset = numNodesAssignedInZone.get(zoneId);
+            numNodesAssignedInZone.put(zoneId, offset + 1);
+
+            int numPartitions = numPartitionsPerNodeAndZone.get(zoneId).get(offset);
+
+            if(numPartitions < node.getNumberOfPartitions()) {
+                donorNodes.put(node, numPartitions);
+            } else if(numPartitions > node.getNumberOfPartitions()) {
+                stealerNodes.put(node, numPartitions);
+            }
+        }
+
+        // Print out donor/stealer information
+        for(Node node: donorNodes.keySet()) {
+            System.out.println("Donor Node: " + node.getId() + ", zoneId " + node.getZoneId()
+                               + ", numPartitions " + node.getNumberOfPartitions()
+                               + ", target number of partitions " + donorNodes.get(node));
+        }
+        for(Node node: stealerNodes.keySet()) {
+            System.out.println("Stealer Node: " + node.getId() + ", zoneId " + node.getZoneId()
+                               + ", numPartitions " + node.getNumberOfPartitions()
+                               + ", target number of partitions " + stealerNodes.get(node));
+        }
+
+        return new Pair<HashMap<Node, Integer>, HashMap<Node, Integer>>(donorNodes, stealerNodes);
+    }
+
+    // TODO: this one
+    public static HashMap<Integer, List<Integer>> getBalancedNumberOfPrimaryPartitionsPerNodeAndZone(final Cluster targetCluster) {
+        // TODO: Make this a util function. I.e., distribute total "evenly" and
+        // provide list of such evenness.
+        Map<Integer, Integer> targetPartitionsPerZone = new HashMap<Integer, Integer>();
+        int zoneIndex = 0;
+        for(int zoneId: targetCluster.getZoneIds()) {
+            int partitionCount = targetCluster.getNumberOfPartitions();
+            int zoneCount = targetCluster.getNumberOfZones();
+            int minPartsPerZone = partitionCount / zoneCount;
+            int extra = (zoneIndex < partitionCount % zoneCount) ? 1 : 0;
+            targetPartitionsPerZone.put(zoneId, minPartsPerZone + extra);
+            zoneIndex++;
+        }
+
+        // TODO: Aha, this is also the same thing as above (effectively).
+        HashMap<Integer, List<Integer>> numPartitionsPerNode = Maps.newHashMap();
+        for(Integer zoneId: targetCluster.getZoneIds()) {
+            int numNodesInZone = targetCluster.getNumberOfNodesInZone(zoneId);
+            int numPartitionsInZone = targetPartitionsPerZone.get(zoneId);
+            int floorPartitionsPerNodeInZone = numPartitionsInZone / numNodesInZone;
+            int numNodesInZoneWithCeil = numPartitionsInZone
+                                         - (numNodesInZone * floorPartitionsPerNodeInZone);
+
+            ArrayList<Integer> partitionsOnNode = new ArrayList<Integer>(numNodesInZone);
+            for(int i = 0; i < numNodesInZoneWithCeil; i++) {
+                partitionsOnNode.add(i, floorPartitionsPerNodeInZone + 1);
+            }
+            for(int i = numNodesInZoneWithCeil; i < numNodesInZone; i++) {
+                partitionsOnNode.add(i, floorPartitionsPerNodeInZone);
+            }
+            numPartitionsPerNode.put(zoneId, partitionsOnNode);
+        }
+        return numPartitionsPerNode;
+    }
+
     /**
      * Assign target number of partitions per node to specific node IDs. Then,
      * separates Nodes into donorNodes and stealerNodes based on whether the
@@ -243,6 +326,93 @@ public class RebalanceClusterUtils {
         }
 
         return new Pair<HashMap<Node, Integer>, HashMap<Node, Integer>>(donorNodes, stealerNodes);
+    }
+
+    // TODO: This one
+    public static Cluster balancePrimaryPartitionsPerZone(final Cluster targetCluster,
+                                                          final List<StoreDefinition> storeDefs) {
+        System.out.println("Balance number of partitions across all nodes and zones.");
+
+        Map<Integer, Integer> targetPartitionsPerZone = new HashMap<Integer, Integer>();
+
+        int zoneIndex = 0;
+        for(int zoneId: targetCluster.getZoneIds()) {
+            int partitionCount = targetCluster.getNumberOfPartitions();
+            int zoneCount = targetCluster.getNumberOfZones();
+            int minPartsPerZone = partitionCount / zoneCount;
+            int extra = (zoneIndex < partitionCount % zoneCount) ? 1 : 0;
+            targetPartitionsPerZone.put(zoneId, minPartsPerZone + extra);
+            zoneIndex++;
+        }
+
+        System.out.println("numPartitionsPerZone");
+        for(int zoneId: targetCluster.getZoneIds()) {
+            System.out.println(zoneId + " : " + targetCluster.getNumberOfPartitionsInZone(zoneId)
+                               + " -> " + targetPartitionsPerZone.get(zoneId));
+        }
+        System.out.println("numNodesPerZone");
+        for(int zoneId: targetCluster.getZoneIds()) {
+            System.out.println(zoneId + " : " + targetCluster.getNumberOfNodesInZone(zoneId));
+        }
+
+        Pair<HashMap<Node, Integer>, HashMap<Node, Integer>> donorsAndStealers = getDonorsAndStealersForBalancedZones(targetCluster);
+        HashMap<Node, Integer> donorNodes = donorsAndStealers.getFirst();
+        List<Node> donorNodeKeys = new ArrayList<Node>(donorNodes.keySet());
+
+        HashMap<Node, Integer> stealerNodes = donorsAndStealers.getSecond();
+        List<Node> stealerNodeKeys = new ArrayList<Node>(stealerNodes.keySet());
+
+        // Go over every stealerNode and steal partitions from donor nodes
+        Cluster returnCluster = ClusterUtils.copyCluster(targetCluster);
+
+        Collections.shuffle(stealerNodeKeys, new Random(System.currentTimeMillis()));
+        for(Node stealerNode: stealerNodeKeys) {
+            int partitionsToSteal = stealerNodes.get(stealerNode)
+                                    - stealerNode.getNumberOfPartitions();
+
+            System.out.println("Node (" + stealerNode.getId() + ") in zone ("
+                               + stealerNode.getZoneId() + ") has partitionsToSteal of "
+                               + partitionsToSteal);
+
+            while(partitionsToSteal > 0) {
+                Collections.shuffle(donorNodeKeys, new Random(System.currentTimeMillis()));
+
+                // Repeatedly loop over donor nodes to distribute stealing
+                for(Node donorNode: donorNodeKeys) {
+                    Node currentDonorNode = returnCluster.getNodeById(donorNode.getId());
+
+                    // Only steal from donor nodes with extra partitions
+                    int partitionsToDonate = currentDonorNode.getNumberOfPartitions()
+                                             - donorNodes.get(donorNode);
+                    if(partitionsToDonate <= 0) {
+                        continue;
+                    }
+
+                    List<Integer> donorPartitions = Lists.newArrayList(currentDonorNode.getPartitionIds());
+
+                    Collections.shuffle(donorPartitions, new Random(System.currentTimeMillis()));
+                    for(int donorPartition: donorPartitions) {
+                        Cluster intermediateCluster = RebalanceUtils.createUpdatedCluster(returnCluster,
+                                                                                          stealerNode.getId(),
+                                                                                          Lists.newArrayList(donorPartition));
+
+                        returnCluster = intermediateCluster;
+                        partitionsToSteal--;
+                        partitionsToDonate--;
+                        System.out.println("Stealer node " + stealerNode.getId() + ", donor node "
+                                           + currentDonorNode.getId() + ", partition stolen "
+                                           + donorPartition);
+
+                        if(partitionsToSteal == 0 || partitionsToDonate == 0)
+                            break;
+                    }
+                    if(partitionsToSteal == 0)
+                        break;
+                }
+            }
+        }
+
+        return returnCluster;
     }
 
     /**

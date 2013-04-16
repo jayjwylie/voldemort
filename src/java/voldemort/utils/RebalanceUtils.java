@@ -545,11 +545,21 @@ public class RebalanceUtils {
                 // Gets the list of replicating partitions.
                 List<Integer> replicaPartitionList = routingStrategy.getReplicatingPartitionList(primary);
 
-                if(replicaPartitionList.size() != storeDef.getReplicationFactor())
+                if(replicaPartitionList.size() != storeDef.getReplicationFactor()) {
+                    /*- 
+                     * TOO VERBOSE!
+                    logger.warn("Number of replicas returned (" + replicaPartitionList.size()
+                                + ") is less than the required replication factor ("
+                                + storeDef.getReplicationFactor() + ")");
+                     */
+                    // TODO: Add this back?
+                    /*-
                     throw new VoldemortException("Number of replicas returned ("
                                                  + replicaPartitionList.size()
                                                  + ") is less than the required replication factor ("
                                                  + storeDef.getReplicationFactor() + ")");
+                     */
+                }
 
                 int replicaType = 0;
                 if(!includePrimary) {

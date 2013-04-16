@@ -1,0 +1,101 @@
+<cluster>
+  <name>vaas-rw</name>
+  <zone>
+    <zone-id>0</zone-id>
+    <proximity-list>1</proximity-list>
+  </zone>
+  <zone>
+    <zone-id>1</zone-id>
+    <proximity-list>0</proximity-list>
+  </zone>
+  <server>
+    <id>0</id>
+    <host>ech3-app0473.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>1, 11, 3, 25, 28, 30, 49, 71, 93, 73, 74</partitions>
+    <zone-id>0</zone-id>
+  </server>
+  <server>
+    <id>1</id>
+    <host>ech3-app0489.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>4, 6, 15, 20, 31, 34, 37, 46, 67, 69</partitions>
+    <zone-id>0</zone-id>
+  </server>
+  <server>
+    <id>2</id>
+    <host>ech3-app0489.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>50, 76, 52, 81, 83, 61, 87, 63, 64, 90</partitions>
+    <zone-id>0</zone-id>
+  </server>
+  <server>
+    <id>3</id>
+    <host>ech3-app0798.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>2, 7, 14, 27, 40, 48, 59, 78, 84, 95</partitions>
+    <zone-id>0</zone-id>
+  </server>
+  <server>
+    <id>4</id>
+    <host>ech3-app0803.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>0, 26, 41, 45, 47, 51, 53, 66, 80, 85</partitions>
+    <zone-id>0</zone-id>
+  </server>
+  <server>
+    <id>5</id>
+    <host>ela4-app0659.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>5, 18, 22, 32, 38, 44, 96, 97, 68, 99</partitions>
+    <zone-id>1</zone-id>
+  </server>
+  <server>
+    <id>6</id>
+    <host>ela4-app1753.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>12, 21, 23, 33, 39, 42, 91, 72, 94, 70</partitions>
+    <zone-id>1</zone-id>
+  </server>
+  <server>
+    <id>7</id>
+    <host>ela4-app0659.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>75, 77, 54, 56, 58, 60, 86, 62, 88, 65</partitions>
+    <zone-id>1</zone-id>
+  </server>
+  <server>
+    <id>8</id>
+    <host>ela4-app0830.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>10, 16, 17, 19, 29, 35, 55, 57, 82, 89</partitions>
+    <zone-id>1</zone-id>
+  </server>
+  <server>
+    <id>9</id>
+    <host>ela4-app0841.prod</host>
+    <http-port>10102</http-port>
+    <socket-port>10103</socket-port>
+    <admin-port>10157</admin-port>
+    <partitions>8, 9, 13, 24, 36, 43, 79, 92, 98</partitions>
+    <zone-id>1</zone-id>
+  </server>
+</cluster>

@@ -309,12 +309,15 @@ public class RebalanceCLI {
                 Cluster targetCluster = new ClusterMapper().readCluster(new File(targetClusterXML));
 
                 if(options.has("generate")) {
+                    // TODO: add this back...
+                    /*-
                     if(generateDisablePrimaryBalancing && !generateEnableRandomSwaps
                        && !generateEnableGreedySwaps && generateMaxContiguousPartitionsPerZone == 0) {
                         System.err.println("Specified generate but did not enable any forms for generation (balance primary partitoins, greedy swaps, random swaps, max contiguous partitions).");
                         printHelp(System.err, parser);
                         System.exit(ERROR_EXIT_CODE);
                     }
+                     */
                     if((options.has("generate-random-swap-attempts") || options.has("generate-random-swap-successes"))
                        && !generateEnableRandomSwaps) {
                         System.err.println("Provided arguments for generate random swaps but disabled the feature");
@@ -401,14 +404,14 @@ public class RebalanceCLI {
         stream.println();
         stream.println("REBALANCE (GENERATE PLAN)");
         stream.println("b) --current-cluster <path> --current-stores <path> --target-cluster <path>");
-        stream.println("\t (1) --no-delete [ Will not delete the data after rebalancing ]");
+        stream.println("\t (1) --delete [ Will delete the data after rebalancing ]");
         stream.println("\t (2) --show-plan [ Will generate only the plan ]");
         stream.println("\t (3) --output-dir [ Path to output dir where we store intermediate metadata ]");
         stream.println("\t (4) --parallelism [ Number of parallel stealer - donor node tasks to run in parallel ] ");
         stream.println("\t (5) --tries [ Number of times we try to move the data before declaring failure ]");
         stream.println("\t (6) --timeout [ Timeout in seconds for one rebalancing task ( stealer - donor tuple ) ]");
         stream.println("\t (7) --batch [ Number of primary partitions to move together ]");
-        stream.println("\t (8) --stealer-based [ Run the rebalancing from the stealers perspective ]");
+        stream.println("\t (8) --stealer-based false [ Run the rebalancing from the donor's perspective ]");
 
         stream.println();
         stream.println("GENERATE");

@@ -1,0 +1,971 @@
+<stores>
+  <store>
+    <name>comm_cancel_keyref</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>2</preferred-reads>
+    <required-reads>1</required-reads>
+    <preferred-writes>1</preferred-writes>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </value-serializer>
+    <retention-days>14</retention-days>
+  </store>
+  <store>
+    <name>inmail-notifier</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>1</preferred-reads>
+    <required-reads>1</required-reads>
+    <preferred-writes>1</preferred-writes>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">{'bornOnDate':'int64', 'comlBody':'string', 'comlLink':'string', 'contentID':'string', 'fromMemberID':'string', 'toMemberName':'string', 'fromName':'string', 'inmailType':'string', 'subject':'string', 'proposalType':'string', 'gid':'string', 'impressionCount':'int32', 'version':'int32', 'isDeleted':'boolean'}</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>anet-downshift</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>1</preferred-reads>
+    <required-reads>1</required-reads>
+    <preferred-writes>1</preferred-writes>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">{'tracking_time':'int64', 'digest_setting':'string' }</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>dto_msg_store</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>1</preferred-reads>
+    <required-reads>1</required-reads>
+    <preferred-writes>1</preferred-writes>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>java-serialization</type>
+    </value-serializer>
+  </store>
+  <store>
+    <name>remailer_voldemort</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>1</preferred-reads>
+    <required-reads>1</required-reads>
+    <preferred-writes>1</preferred-writes>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>invitations_invitees_with_pending_invites</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">["string"]</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>remailer_voldemort_userLastReply</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>welcome-tracking-rw</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">{'memberId':'string', 'sendEmailKey':['string'], 'clickEmailKey':['string'] }</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>foobar_voldemort</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </value-serializer>
+    <retention-days>14</retention-days>
+  </store>
+  <store>
+    <name>tickle_msg_store</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>2</preferred-reads>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </value-serializer>
+    <retention-days>2</retention-days>
+    <memory-footprint>2048</memory-footprint>
+  </store>
+  <store>
+    <name>tickle_mail_history</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>2</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">[{"message_id":"string", "category_id":"int32", "send_date":"int32"}]</schema-info>
+    </value-serializer>
+    <retention-days>7</retention-days>
+  </store>
+  <store>
+    <name>csp_fcap</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>java-serialization</type>
+    </value-serializer>
+  </store>
+  <store>
+    <name>signalSearchHistoryStore</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>java-serialization</type>
+    </value-serializer>
+    <retention-days>1</retention-days>
+  </store>
+  <store>
+    <name>jposTalentMatchResults</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">{"companyId":"int32", "posterMemberId":"int32", "uuid":"string"}</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">[{"memberId":"int32","score":"float32"}]</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>liquorQuestionAndAnswerDecorationInfo</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>java-serialization</type>
+    </key-serializer>
+    <value-serializer>
+      <type>java-serialization</type>
+    </value-serializer>
+  </store>
+  <store>
+    <name>member_logins</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">{"last_access_time":"string", "last_check_time": "string", "version":"string"}</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>bounce_reconfirmation_date</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"int64"</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>member_restrictions</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>remailer_voldemort_throttleTimestamps</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">["int32"]</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>member_notifications</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">{
+          "max_local_id":"int32",
+          "unread": [
+                      {
+                        "local_id":"int32",
+                        "notification_type":"string",
+                        "timestamp":"date",
+                        "notification_content":["string"]
+                      }
+                    ],
+          "read":   [
+                      {
+                        "local_id":"int32",
+                        "notification_type":"string",
+                        "timestamp":"date",
+                        "notification_content":["string"]
+                      }
+                    ]
+        }</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>guest-opt-out</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">["int32"]</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>skills-suggested-skills-feedback</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>2</preferred-reads>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">[{"skill_id":"int32", "ts":"int32"}]</schema-info>
+    </value-serializer>
+    <retention-days>14</retention-days>
+  </store>
+  <store>
+    <name>invalid_password_store</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"boolean"</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>message_invitation_notification_info</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">{ "newMsgCnt":"int32", "newInvCnt":"int32", "newNofCnt":"int32" }</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>email_bounce_header</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>2</preferred-reads>
+    <required-reads>1</required-reads>
+    <preferred-writes>1</preferred-writes>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>string</type>
+      <schema-info version="0">UTF-8</schema-info>
+    </value-serializer>
+    <retention-days>7</retention-days>
+  </store>
+  <store>
+    <name>wvmx_last_visit</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>6</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">3</replication-factor>
+      <replication-factor zone-id="1">3</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>2</preferred-reads>
+    <required-reads>1</required-reads>
+    <preferred-writes>2</preferred-writes>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">["int64"]</schema-info>
+    </value-serializer>
+    <retention-days>90</retention-days>
+  </store>
+  <store>
+    <name>pymk-feedback</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">[{"dest_id":"int32", "ts":"int32"}]</schema-info>
+    </value-serializer>
+    <retention-days>14</retention-days>
+  </store>
+  <store>
+    <name>jobs_blog_cache</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>java-serialization</type>
+    </key-serializer>
+    <value-serializer>
+      <type>java-serialization</type>
+    </value-serializer>
+  </store>
+  <store>
+    <name>dynconfig</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>string</type>
+      <schema-info version="0">utf8</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>string</type>
+      <schema-info version="0">utf8</schema-info>
+      <compression>
+        <type>gzip</type>
+      </compression>
+    </value-serializer>
+  </store>
+  <store>
+    <name>comm-anet-digest-optout</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>6</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">3</replication-factor>
+      <replication-factor zone-id="1">3</replication-factor>
+    </zone-replication-factor>
+    <required-reads>2</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">[{'opt_out_list':'string'}]</schema-info>
+    </value-serializer>
+  </store>
+  <store>
+    <name>message_sent_history</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">["string"]</schema-info>
+    </value-serializer>
+    <retention-days>731</retention-days>
+  </store>
+  <store>
+    <name>endorsements-suggested-feedback</name>
+    <persistence>bdb</persistence>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>6</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">3</replication-factor>
+      <replication-factor zone-id="1">3</replication-factor>
+    </zone-replication-factor>
+    <required-reads>2</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int64"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">[{"recipient_id":"int64","recipient_type":"string","endorsed_item_id":"int64","endorsed_item_type":"string","ts":"int32"}]</schema-info>
+      <compression>
+        <type>gzip</type>
+      </compression>
+    </value-serializer>
+  </store>
+  <store>
+    <name>recipient_notifications</name>
+    <persistence>bdb</persistence>
+    <description>Notifications bar for giving immediate user feedback.</description>
+    <owners>jlin@linkedin.com</owners>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>avro-specific</type>
+      <schema-info version="0">java=com.linkedin.notifications.v2.avro.VoldemortRecipientNotifications</schema-info>
+      <compression>
+        <type>gzip</type>
+      </compression>
+    </value-serializer>
+  </store>
+  <store>
+    <name>password_change_history</name>
+    <persistence>bdb</persistence>
+    <description>History of member password changes (updates, resets, invalidations)</description>
+    <owners>mnilange</owners>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <preferred-reads>2</preferred-reads>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int64"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+      <compression>
+        <type>gzip</type>
+      </compression>
+    </value-serializer>
+    <retention-days>731</retention-days>
+  </store>
+  <store>
+    <name>email-unsubscribe</name>
+    <persistence>bdb</persistence>
+    <description>Stores email unsubscribe tokens so users can unsub without logging in</description>
+    <owners>jbellister</owners>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"string"</schema-info>
+    </value-serializer>
+    <retention-days>14</retention-days>
+  </store>
+  <store>
+    <name>liarOfflineRecommendationEventStore</name>
+    <persistence>bdb</persistence>
+    <description>Written to and read by liar-application; stores timestamps for liar-app to determine when to send events notifying clients of new recommendations</description>
+    <owners>twalker</owners>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>4</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">2</replication-factor>
+      <replication-factor zone-id="1">2</replication-factor>
+    </zone-replication-factor>
+    <required-reads>1</required-reads>
+    <required-writes>1</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>avro-generic</type>
+      <schema-info version="0">{
+        "namespace":"com.linkedin.liar.app.sink",
+        "name": "LiarEntityMatchSinkKeyAvro",
+        "type": "record",
+        "fields":[
+          {"name":"sourceId","type":"int"},
+          {"name":"algorithmId","type":"int"},
+          {"name":"intent","type":"string"}
+         ]
+       }</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>avro-generic</type>
+      <schema-info version="0">{
+          "namespace": "com.linkedin.liar",
+          "name": "LiarTimestampAvro",
+          "type": "record",
+          "fields":
+          [
+            {"name": "lastMod", "type": "long"},
+          ]
+        }</schema-info>
+    </value-serializer>
+    <retention-days>2</retention-days>
+  </store>
+  <store>
+    <name>contacts-optin-settings</name>
+    <persistence>bdb</persistence>
+    <description>To store the the state of users during the ramp to the new LinkedIn Contacts experience</description>
+    <owners>sagarwal, gvenkata</owners>
+    <routing-strategy>zone-routing</routing-strategy>
+    <routing>client</routing>
+    <replication-factor>6</replication-factor>
+    <zone-replication-factor>
+      <replication-factor zone-id="0">3</replication-factor>
+      <replication-factor zone-id="1">3</replication-factor>
+    </zone-replication-factor>
+    <required-reads>2</required-reads>
+    <required-writes>2</required-writes>
+    <zone-count-reads>0</zone-count-reads>
+    <zone-count-writes>0</zone-count-writes>
+    <hinted-handoff-strategy>proximity-handoff</hinted-handoff-strategy>
+    <key-serializer>
+      <type>json</type>
+      <schema-info version="0">"int64"</schema-info>
+    </key-serializer>
+    <value-serializer>
+      <type>json</type>
+      <schema-info version="0">"int32"</schema-info>
+    </value-serializer>
+  </store>
+</stores>

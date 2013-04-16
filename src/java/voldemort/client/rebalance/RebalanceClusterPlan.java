@@ -182,11 +182,19 @@ public class RebalanceClusterPlan {
             Map<Integer, Set<Pair<Integer, Integer>>> stealerNodeIdToStolenPartitionTuples = RebalanceUtils.getStolenPartitionTuples(currentCluster,
                                                                                                                                      targetCluster,
                                                                                                                                      storeDef);
-
             // If null, done with this stealer node for this store
             if(stealerNodeIdToStolenPartitionTuples.get(stealerNodeId) == null) {
                 continue;
             }
+            // TODO: Extra debuggin printfs if needed
+            /*-
+            else {
+                System.out.println("Node: " + stealerNodeId + " replica type diff ... ");
+                for(Pair<Integer, Integer> rt: stealerNodeIdToStolenPartitionTuples.get(stealerNodeId)) {
+                    System.out.println(rt.getFirst() + " : " + rt.getSecond());
+                }
+            }
+             */
 
             final Set<Pair<Integer, Integer>> haveToStealTuples = Sets.newHashSet(stealerNodeIdToStolenPartitionTuples.get(stealerNodeId));
 
@@ -205,11 +213,17 @@ public class RebalanceClusterPlan {
                 final Set<Pair<Integer, Integer>> trackStealPartitionsTuples = new HashSet<Pair<Integer, Integer>>();
                 final Set<Pair<Integer, Integer>> trackDeletePartitionsTuples = new HashSet<Pair<Integer, Integer>>();
 
+                // TODO: Moo. donatePartitoinTuple ought to take all donor nodes
+                // as input and select "best" partitoin to donate. E.g., from
+                // within the zone!
                 // Checks if this donor node can donate any tuples
                 donatePartitionTuple(donorNode,
                                      haveToStealTuples,
                                      trackStealPartitionsTuples,
                                      currentNodeIdToAllPartitionTuples.get(donorNode.getId()));
+
+                // TODO: Probably want to HARD separate delete path from clone
+                // path. Or, at least change delete path to be post processed.
 
                 // Check if we can delete the partitions this donor just donated
                 donateDeletePartitionTuple(donorNode,
@@ -272,6 +286,11 @@ public class RebalanceClusterPlan {
                                         RebalanceUtils.flattenPartitionTuples(trackPartitionsTuples));
     }
 
+    // TODO: trackStealPartitoinsTuples is updated in this method. I.e., the
+    // 'void' return code is misleading. AND, only specific
+    // partitionId:replicaType's are actually stolen. AND, 'haveToStealTuples'
+    // is also modifeid. Hmm, why bother with OO design when you can just write
+    // 10 line methods this hard to reason about.
     /**
      * Given a donor node and a set of tuples that need to be stolen, checks if
      * the donor can contribute any
@@ -292,12 +311,25 @@ public class RebalanceClusterPlan {
         // donate it
         while(iter.hasNext()) {
             Pair<Integer, Integer> partitionTupleToSteal = iter.next();
+
+            // TODO: HACK to steal from ANY node that has the desired partition.
+            // Totally ignoring the replicaType BS.
+            for(Pair<Integer, Integer> rt: donorPartitionTuples) {
+                if(rt.getSecond() == partitionTupleToSteal.getSecond()) {
+                    trackStealPartitionsTuples.add(partitionTupleToSteal);
+
+                    // This partition has been donated, remove it
+                    iter.remove();
+                }
+            }
+            /*-
             if(donorPartitionTuples.contains(partitionTupleToSteal)) {
                 trackStealPartitionsTuples.add(partitionTupleToSteal);
 
                 // This partition has been donated, remove it
                 iter.remove();
             }
+             */
         }
     }
 

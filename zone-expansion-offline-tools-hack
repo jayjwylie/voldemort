@@ -1,0 +1,35 @@
+OUT2=ze-test/out2
+OUT3=ze-test/out3
+mkdir -p $OUT2
+mkdir -p $OUT3
+CC=ze-test/from2to3/cluster.xml
+ST2=ze-test/from2to3/stores2.xml
+ST3=ze-test/from2to3/stores3.xml
+TC2=ze-test/from2to3/target2.xml
+TC3=ze-test/from2to3/target3.xml
+FC2=$OUT2/repartition/final-cluster.xml
+FC3=$OUT3/repartition/final-cluster.xml
+
+---
+Cluster-expansion for 2 zones
+(1) repartition
+$ ./bin/voldemort-rebalance.sh --current-cluster $CC --current-stores $ST2 --target-cluster $TC2 --generate --output-dir $OUT2/repartition --tries 1 --generate-disable-primary-balancing  | tee $OUT2/repartition.log
+
+(2) analyze
+$ ./bin/voldemort-rebalance.sh --analyze --current-cluster $FC2  --current-stores $ST2 | tee $OUT2/analysis.txt
+
+(3) plan
+$ ./bin/voldemort-rebalance.sh --current-cluster $CC --current-stores $ST2 --target-cluster $FC2 --show-plan --batch 1000 --parallelism 1 | tee $OUT2/plan.log
+
+
+---
+Zone-expansion from 2 to 3 zones
+
+(1) repartition (notes use of $ST2 versus $TC3)
+$ ./bin/voldemort-rebalance.sh --current-cluster $CC --current-stores $ST2 --target-cluster $TC3 --generate --output-dir $OUT3/repartition --tries 1 --generate-disable-primary-balancing  | tee $OUT3/repartition.log
+
+(2) analyze
+$ ./bin/voldemort-rebalance.sh --analyze --current-cluster $FC3  --current-stores $ST3 | tee $OUT3/analysis.txt
+
+(3) plan (note use of $TC3 instead of $CC)
+$ ./bin/voldemort-rebalance.sh --current-cluster $TC3 --current-stores $ST3 --target-cluster $FC3 --show-plan --batch 1000 --parallelism 1 | tee $OUT3/plan.log

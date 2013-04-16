@@ -281,6 +281,9 @@ public class ClusterUtils {
         for(Integer zoneId: cluster.getZoneIds()) {
             List<Integer> partitionIds = new ArrayList<Integer>(cluster.getPartitionIdsInZone(zoneId));
 
+            if(partitionIds.size() == 0) {
+                continue;
+            }
             int lastPartitionId = partitionIds.get(0);
             int initPartitionId = lastPartitionId;
 
