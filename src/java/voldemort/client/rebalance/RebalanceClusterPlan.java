@@ -132,6 +132,7 @@ public class RebalanceClusterPlan {
         return rebalanceTaskQueue;
     }
 
+    // TODO: Revisit these "two principles". I am not sure about the second one.
     /**
      * Generate the list of partition movement based on 2 principles:
      * 
@@ -316,7 +317,13 @@ public class RebalanceClusterPlan {
             // Totally ignoring the replicaType BS.
             for(Pair<Integer, Integer> rt: donorPartitionTuples) {
                 if(rt.getSecond() == partitionTupleToSteal.getSecond()) {
-                    trackStealPartitionsTuples.add(partitionTupleToSteal);
+                    // TODO: Must use donor partition tuple (rt) rather than
+                    // stealer partitoin tuple (partitionUtpleToSteal) to ensure
+                    // that the admin fetch op checks that confirm the "right"
+                    // replica type is being stolen do not prevent rebalancing.
+
+                    trackStealPartitionsTuples.add(rt);
+                    // trackStealPartitionsTuples.add(partitionTupleToSteal);
 
                     // This partition has been donated, remove it
                     iter.remove();

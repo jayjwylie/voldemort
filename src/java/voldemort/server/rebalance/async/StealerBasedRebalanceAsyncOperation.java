@@ -178,6 +178,15 @@ public class StealerBasedRebalanceAsyncOperation extends RebalanceAsyncOperation
             int asyncId = adminClient.storeMntOps.migratePartitions(stealInfo.getDonorId(),
                                                                     metadataStore.getNodeId(),
                                                                     storeName,
+                                                                    // TODO:
+                                                                    // replicaType
+                                                                    // must
+                                                                    // match the
+                                                                    // donor's
+                                                                    // replicaType
+                                                                    // from
+                                                                    // original
+                                                                    // topology.
                                                                     stealInfo.getReplicaToAddPartitionList(storeName),
                                                                     null,
                                                                     stealInfo.getInitialCluster(),
