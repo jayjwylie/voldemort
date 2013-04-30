@@ -177,6 +177,7 @@ public class RebalanceUtils {
         }
     }
 
+    // TODO: Deprecate in favor of RebalanceClusterPlan.getCrossZoneMoves()
     /**
      * Return the number of cross zone copying that is going to take place
      * 
@@ -184,6 +185,7 @@ public class RebalanceUtils {
      * @param plan The rebalance plan
      * @return Number of cross zone moves
      */
+    @Deprecated
     public static int getCrossZoneMoves(final Cluster targetCluster, final RebalanceClusterPlan plan) {
 
         int crossZoneMoves = 0;
@@ -202,12 +204,14 @@ public class RebalanceUtils {
         return crossZoneMoves;
     }
 
+    // TODO: Deprecate in favor of RebalanceClusterPlan.getTotalMoves()
     /**
      * Return the number of total moves
      * 
      * @param plan The rebalance plan
      * @return Number of moves
      */
+    @Deprecated
     public static int getTotalMoves(final RebalanceClusterPlan plan) {
 
         int totalMoves = 0;
@@ -249,7 +253,8 @@ public class RebalanceUtils {
      * @param adminClient Admin client used to query
      * @throws VoldemortRebalancingException if any node is not in normal state
      */
-    public static void validateClusterState(final Cluster cluster, final AdminClient adminClient) {
+    public static void validateProdClusterStateIsNormal(final Cluster cluster,
+                                                        final AdminClient adminClient) {
         for(Node node: cluster.getNodes()) {
             Versioned<VoldemortState> versioned = adminClient.rebalanceOps.getRemoteServerState(node.getId());
 
@@ -265,6 +270,207 @@ public class RebalanceUtils {
                 }
             }
         }
+    }
+
+    /**
+     * Verify store definitions are congruent with cluster definition.
+     * 
+     * @param cluster
+     * @param stores
+     */
+    public static void validateClusterStores(final Cluster cluster,
+                                             final List<StoreDefinition> storeDefs) {
+        // Constructing a PartitionBalance object has the (desirable in this
+        // case) side-effect of verifying that the store definition is congruent
+        // with the cluster definition. If there are issues, exceptions are
+        // thrown.
+        new PartitionBalance(cluster, storeDefs);
+        return;
+    }
+
+    /**
+     * A final cluster ought to be a super set of current cluster. I.e.,
+     * existing node IDs ought to map to same server, but partition layout can
+     * have changed and there may exist new nodes.
+     * 
+     * @param currentCluster
+     * @param finalCluster
+     */
+    public static void validateCurrentFinalCluster(final Cluster currentCluster,
+                                                   final Cluster finalCluster) {
+        validateClusterPartitionCounts(currentCluster, finalCluster);
+        validateClusterNodeState(currentCluster, finalCluster);
+
+        return;
+    }
+
+    /**
+     * A target cluster ought to be a super set of current cluster. I.e., it
+     * ought to either be the same as current cluster (every partition is mapped
+     * to the same node of current & target), or it ought to have more nodes
+     * (possibly in new zones) without partitions.
+     * 
+     * @param currentCluster
+     * @param targetCluster
+     */
+    public static void validateCurrentTargetCluster(final Cluster currentCluster,
+                                                    final Cluster targetCluster) {
+        validateClusterPartitionCounts(currentCluster, targetCluster);
+        validateClusterNodeState(currentCluster, targetCluster);
+        validateClusterPartitionState(currentCluster, targetCluster);
+
+        return;
+    }
+
+    /**
+     * Target and final ought to have same partition counts, same zones, and
+     * same node state. Partitions per node may of course differ.
+     * 
+     * @param targetCluster
+     * @param finalCluster
+     */
+    public static void validateTargetFinalCluster(final Cluster targetCluster,
+                                                  final Cluster finalCluster) {
+        validateClusterPartitionCounts(targetCluster, finalCluster);
+        validateClusterZonesSame(targetCluster, finalCluster);
+        validateClusterNodeCounts(targetCluster, finalCluster);
+        validateClusterNodeState(targetCluster, finalCluster);
+        return;
+    }
+
+    /**
+     * Confirms that both clusters have the same number of total partitions.
+     * 
+     * @param lhs
+     * @param rhs
+     */
+    public static void validateClusterPartitionCounts(final Cluster lhs, final Cluster rhs) {
+        if(lhs.getNumberOfPartitions() != rhs.getNumberOfPartitions())
+            throw new VoldemortException("Total number of partitions should be equal [ lhs cluster ("
+                                         + lhs.getNumberOfPartitions()
+                                         + ") not equal to rhs cluster ("
+                                         + rhs.getNumberOfPartitions() + ") ]");
+    }
+
+    /**
+     * Confirm that all nodes shared between clusters host exact same partition
+     * IDs and that nodes only in the super set cluster have no partition IDs.
+     * 
+     * @param subsetCluster
+     * @param supersetCluster
+     */
+    public static void validateClusterPartitionState(final Cluster subsetCluster,
+                                                     final Cluster supersetCluster) {
+        if(!supersetCluster.getNodeIds().containsAll(subsetCluster.getNodeIds())) {
+            throw new VoldemortException("Superset cluster does not contain all nodes from subset cluster[ subset cluster node ids ("
+                                         + subsetCluster.getNodeIds()
+                                         + ") are not a subset of superset cluster node ids ("
+                                         + supersetCluster.getNodeIds() + ") ]");
+
+        }
+        for(int nodeId: subsetCluster.getNodeIds()) {
+            Node supersetNode = supersetCluster.getNodeById(nodeId);
+            Node subsetNode = subsetCluster.getNodeById(nodeId);
+            if(!supersetNode.getPartitionIds().equals(subsetNode.getPartitionIds())) {
+                throw new VoldemortRebalancingException("Partition IDs do not match between clusters for nodes with id "
+                                                        + nodeId
+                                                        + " : subset cluster has "
+                                                        + subsetNode.getPartitionIds()
+                                                        + " and superset cluster has "
+                                                        + supersetNode.getPartitionIds());
+            }
+        }
+        Set<Integer> nodeIds = supersetCluster.getNodeIds();
+        nodeIds.removeAll(subsetCluster.getNodeIds());
+        for(int nodeId: nodeIds) {
+            Node supersetNode = supersetCluster.getNodeById(nodeId);
+            if(!supersetNode.getPartitionIds().isEmpty()) {
+                throw new VoldemortRebalancingException("New node "
+                                                        + nodeId
+                                                        + " in superset cluster already has partitions: "
+                                                        + supersetNode.getPartitionIds());
+            }
+        }
+    }
+
+    /**
+     * Confirms that both clusters have the same set of zones defined.
+     * 
+     * @param lhs
+     * @param rhs
+     */
+    public static void validateClusterZonesSame(final Cluster lhs, final Cluster rhs) {
+        if(lhs.getZones().equals(rhs.getZones()))
+            throw new VoldemortException("Zones are not the same [ lhs cluster zones ("
+                                         + lhs.getZones() + ") not equal to rhs cluster zones ("
+                                         + rhs.getZones() + ") ]");
+    }
+
+    /**
+     * Confirms that both clusters have the same number of nodes by comparing
+     * set of node Ids between clusters.
+     * 
+     * @param lhs
+     * @param rhs
+     */
+    public static void validateClusterNodeCounts(final Cluster lhs, final Cluster rhs) {
+        if(!lhs.getNodeIds().equals(rhs.getNodeIds())) {
+            throw new VoldemortException("Node ids are not the same [ lhs cluster node ids ("
+                                         + lhs.getNodeIds()
+                                         + ") not equal to rhs cluster node ids ("
+                                         + rhs.getNodeIds() + ") ]");
+        }
+    }
+
+    /**
+     * Confirms that any nodes from supersetCluster that are in subsetCluster
+     * have the same state (i.e., node id, host name, and ports). Specific
+     * partitions hosted are not compared.
+     * 
+     * @param subsetCluster
+     * @param supersetCluster
+     */
+    public static void validateClusterNodeState(final Cluster subsetCluster,
+                                                final Cluster supersetCluster) {
+        if(!supersetCluster.getNodeIds().containsAll(subsetCluster.getNodeIds())) {
+            throw new VoldemortException("Superset cluster does not contain all nodes from subset cluster[ subset cluster node ids ("
+                                         + subsetCluster.getNodeIds()
+                                         + ") are not a subset of superset cluster node ids ("
+                                         + supersetCluster.getNodeIds() + ") ]");
+
+        }
+        for(Node subsetNode: subsetCluster.getNodes()) {
+            Node supersetNode = supersetCluster.getNodeById(subsetNode.getId());
+            if(!subsetNode.isEqualState(supersetNode)) {
+                throw new VoldemortException("Nodes do not have same state[ subset node state ("
+                                             + subsetNode.getStateString()
+                                             + ") not equal to superset node state ("
+                                             + supersetNode.getStateString() + ") ]");
+            }
+        }
+    }
+
+    /**
+     * Given the current cluster and final cluster, generates a target cluster
+     * with empty new nodes (and zones).
+     * 
+     * @param currentCluster Current cluster metadata
+     * @param finalCluster Final cluster metadata
+     * @return Returns a new target cluster which contains nodes and zones of
+     *         final cluster, but with empty partition lists if they were not
+     *         present in current cluster.
+     */
+    public static Cluster getTargetCluster(Cluster currentCluster, Cluster finalCluster) {
+        List<Node> newNodeList = new ArrayList<Node>(currentCluster.getNodes());
+        for(Node node: finalCluster.getNodes()) {
+            if(!ClusterUtils.containsNode(currentCluster, node.getId())) {
+                newNodeList.add(NodeUtils.updateNode(node, new ArrayList<Integer>()));
+            }
+        }
+        Collections.sort(newNodeList);
+        return new Cluster(currentCluster.getName(),
+                           newNodeList,
+                           Lists.newArrayList(finalCluster.getZones()));
     }
 
     /**

@@ -60,6 +60,7 @@ import voldemort.server.niosocket.NioSocketService;
 import voldemort.server.protocol.RequestHandler;
 import voldemort.server.protocol.RequestHandlerFactory;
 import voldemort.server.protocol.SocketRequestHandlerFactory;
+import voldemort.server.protocol.admin.AsyncOperationService;
 import voldemort.server.socket.SocketService;
 import voldemort.store.Store;
 import voldemort.store.StoreDefinition;
@@ -425,37 +426,105 @@ public class ServerTestUtils {
         }
     }
 
+    public static Cluster getLocalZonedCluster(int numberOfNodes,
+                                               int numberOfZones,
+                                               int[] nodeToZoneMapping,
+                                               int[][] partitionMapping) {
+        return getLocalZonedCluster(numberOfNodes,
+                                    numberOfZones,
+                                    nodeToZoneMapping,
+                                    partitionMapping,
+                                    findFreePorts(3 * numberOfNodes));
+    }
+
+    /**
+     * Returns a cluster with <b>numberOfNodes</b> nodes in <b>numberOfZones</b>
+     * zones. It is important that <b>numberOfNodes</b> be divisible by
+     * <b>numberOfZones</b>
+     * 
+     * @param numberOfNodes Number of nodes in the cluster
+     * @param partitionsPerNode Number of partitions in one node
+     * @param numberOfZones Number of zones
+     * @return Cluster
+     */
+    public static Cluster getLocalZonedCluster(int numberOfNodes,
+                                               int numberOfZones,
+                                               int[] nodeToZoneMapping,
+                                               int[][] partitionMapping,
+                                               int[] ports) {
+
+        if(numberOfZones > 0 && numberOfNodes > 0 && numberOfNodes % numberOfZones != 0) {
+            throw new VoldemortException("The number of nodes (" + numberOfNodes
+                                         + ") is not divisible by number of zones ("
+                                         + numberOfZones + ")");
+        }
+
+        List<Node> nodes = new ArrayList<Node>();
+        for(int i = 0; i < numberOfNodes; i++) {
+
+            List<Integer> partitions = new ArrayList<Integer>(partitionMapping[i].length);
+            for(int p: partitionMapping[i]) {
+                partitions.add(p);
+            }
+
+            nodes.add(new Node(i,
+                               "localhost",
+                               ports[3 * i],
+                               ports[3 * i + 1],
+                               ports[3 * i + 2],
+                               nodeToZoneMapping[i],
+                               partitions));
+        }
+
+        // Generate zones
+        List<Zone> zones = Lists.newArrayList();
+        for(int i = 0; i < numberOfZones; i++) {
+            LinkedList<Integer> proximityList = Lists.newLinkedList();
+            int zoneId = i + 1;
+            for(int j = 0; j < numberOfZones - 1; j++) {
+                proximityList.add(zoneId % numberOfZones);
+                zoneId++;
+            }
+            zones.add(new Zone(i, proximityList));
+        }
+        return new Cluster("cluster", nodes, zones);
+    }
+
     /**
      * Returns a cluster with <b>numberOfZones</b> zones. The array
      * <b>nodesPerZone<b> indicates how many nodes are in each of the zones. The
      * a nodes in <b>numberOfZones</b> zones. It is important that
      * <b>numberOfNodes</b> be divisible by <b>numberOfZones</b>
      * 
+     * Does
+     * 
      * @param numberOfZones The number of zones in the cluster.
-     * @param nodesPerZone An array of size <b>numberOfZones<b> indicating the
-     *        number of nodes in each zone.
+     * @param nodeIdsPerZone An array of size <b>numberOfZones<b> in which each
+     *        internal array is a node ID.
      * @param partitionMap An array of size total number of nodes (derived from
      *        <b>nodesPerZone<b> that indicates the specific partitions on each
      *        node.
      * @return
      */
+    // TODO: Method should eventually accept a list of ZoneIds so that
+    // non-contig zone Ids can be tested.
     public static Cluster getLocalZonedCluster(int numberOfZones,
-                                               int[] nodesPerZone,
+                                               int[][] nodeIdsPerZone,
                                                int[][] partitionMap) {
 
         if(numberOfZones < 1) {
             throw new VoldemortException("The number of zones must be positive (" + numberOfZones
                                          + ")");
         }
-        if(nodesPerZone.length != numberOfZones) {
+        if(nodeIdsPerZone.length != numberOfZones) {
             throw new VoldemortException("Mismatch between numberOfZones (" + numberOfZones
-                                         + ") and size of nodesPerZone array (" + nodesPerZone
-                                         + ").");
+                                         + ") and size of nodesPerZone array ("
+                                         + nodeIdsPerZone.length + ").");
         }
 
         int numNodes = 0;
-        for(Integer nodesInZone: nodesPerZone) {
-            numNodes += nodesInZone;
+        for(int nodeIdsInZone[]: nodeIdsPerZone) {
+            numNodes += nodeIdsInZone.length;
         }
         if(partitionMap.length != numNodes) {
             throw new VoldemortException("Mismatch between numNodes (" + numNodes
@@ -465,22 +534,21 @@ public class ServerTestUtils {
 
         // Generate nodes
         List<Node> nodes = new ArrayList<Node>();
-        int[] ports = findFreePorts(3 * numNodes);
-        int nodeId = 0;
+        int partitionMapOffset = 0;
         for(int zoneId = 0; zoneId < numberOfZones; zoneId++) {
-            for(int j = 0; j < nodesPerZone[zoneId]; j++) {
+            for(int nodeId: nodeIdsPerZone[zoneId]) {
                 List<Integer> partitions = new ArrayList<Integer>(partitionMap[nodeId].length);
-                for(int p: partitionMap[nodeId]) {
+                for(int p: partitionMap[partitionMapOffset]) {
                     partitions.add(p);
                 }
                 nodes.add(new Node(nodeId,
-                                   "localhost",
-                                   ports[3 * nodeId],
-                                   ports[3 * nodeId + 1],
-                                   ports[3 * nodeId + 2],
+                                   "node-" + nodeId,
+                                   64000,
+                                   64001,
+                                   64002,
                                    zoneId,
                                    partitions));
-                nodeId++;
+                partitionMapOffset++;
             }
         }
 
@@ -831,6 +899,51 @@ public class ServerTestUtils {
         store.close();
         if(!success)
             throw new RuntimeException("Failed to connect with server:" + node);
+    }
+
+    /***
+     * 
+     * 
+     * NOTE: This relies on the current behavior of the AsyncOperationService to
+     * remove an operation if an explicit isComplete() is invoked. If/When that
+     * is changed, this method will always block upto timeoutMs & return
+     * 
+     * @param server
+     * @param asyncOperationPattern substring to match with the operation
+     *        description
+     * @param timeoutMs
+     * @return
+     */
+    public static boolean waitForAsyncOperationOnServer(VoldemortServer server,
+                                                        String asyncOperationPattern,
+                                                        long timeoutMs) {
+        long endTimeMs = System.currentTimeMillis() + timeoutMs;
+        AsyncOperationService service = server.getAsyncRunner();
+        List<Integer> matchingOperationIds = null;
+        // wait till the atleast one matching operation shows up
+        while(System.currentTimeMillis() < endTimeMs) {
+            matchingOperationIds = service.getMatchingAsyncOperationList(asyncOperationPattern,
+                                                                         true);
+            if(matchingOperationIds.size() > 0) {
+                System.err.println(">>" + matchingOperationIds);
+                break;
+            }
+        }
+        // now wait for those operations to complete
+        while(System.currentTimeMillis() < endTimeMs) {
+            List<Integer> completedOps = new ArrayList<Integer>(matchingOperationIds.size());
+            for(Integer op: matchingOperationIds) {
+                if(service.isComplete(op)) {
+                    System.err.println("Operation " + op + " is complete");
+                    completedOps.add(op);
+                }
+            }
+            matchingOperationIds.removeAll(completedOps);
+            if(matchingOperationIds.size() == 0) {
+                return false;
+            }
+        }
+        return false;
     }
 
     protected static Cluster internalStartVoldemortCluster(int numServers,

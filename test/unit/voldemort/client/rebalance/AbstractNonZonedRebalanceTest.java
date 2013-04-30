@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2012 LinkedIn, Inc
+ * Copyright 2008-2013 LinkedIn, Inc
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -397,17 +397,16 @@ public abstract class AbstractNonZonedRebalanceTest extends AbstractRebalanceTes
         try {
             Cluster currentCluster = ServerTestUtils.getLocalCluster(2, new int[][] {
                     { 0, 1, 2, 3, 4, 5, 6 }, { 7, 8 } });
-
             Cluster targetCluster = RebalanceUtils.createUpdatedCluster(currentCluster,
                                                                         1,
                                                                         Lists.newArrayList(2, 3));
-
             // start servers 0 , 1 only
             List<Integer> serverList = Arrays.asList(0, 1);
             currentCluster = startServers(currentCluster,
                                           rwStoreDefFileWithReplication,
                                           serverList,
                                           null);
+
             // Update the cluster information based on the node information
             targetCluster = updateCluster(targetCluster);
 

@@ -2402,29 +2402,25 @@ public class AdminClient {
                                                                                                                          true);
             Set<Integer> completedNodeIds = Sets.newHashSet();
 
-            int nodeId = 0;
             HashMap<Integer, Exception> exceptions = Maps.newHashMap();
 
             try {
-                while(nodeId < transitionCluster.getNumberOfNodes()) {
-
+                for(Node node: transitionCluster.getNodes()) {
                     try {
-                        individualStateChange(nodeId,
+                        individualStateChange(node.getId(),
                                               transitionCluster,
-                                              stealerNodeToPlan.get(nodeId),
+                                              stealerNodeToPlan.get(node.getId()),
                                               swapRO,
                                               changeClusterMetadata,
                                               changeRebalanceState,
                                               false);
-                        completedNodeIds.add(nodeId);
+                        completedNodeIds.add(node.getId());
                     } catch(Exception e) {
-                        exceptions.put(nodeId, e);
+                        exceptions.put(node.getId(), e);
                         if(failEarly) {
                             throw e;
                         }
                     }
-                    nodeId++;
-
                 }
 
                 if(exceptions.size() > 0) {

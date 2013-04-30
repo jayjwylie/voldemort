@@ -488,7 +488,15 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest0.get(entry.getKey(), null).get(0).getValue()));
-                assertEquals(storeTest1.get(entry.getKey(), null).size(), 0);
+                // TODO: Add deletion tests back (and add more deletion tests)
+                // if we
+                // decide to continue to support delete during rebalancing. The
+                // below check is confirming the deletion of a partition-store
+                // which does not currently happen because RebalanceClusterPlan
+                // is in a state that does not handle deletion.
+
+                // TODO: deletion test to add back
+                // assertEquals(storeTest1.get(entry.getKey(), null).size(), 0);
 
                 // Check in other store
                 assertSame("entry should be present in store test2 ",
@@ -497,7 +505,9 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest20.get(entry.getKey(), null).get(0).getValue()));
-                assertEquals(storeTest00.get(entry.getKey(), null).size(), 0);
+                // TODO: deletion test to add back
+                // assertEquals(storeTest00.get(entry.getKey(), null).size(),
+                // 0);
             }
 
             // Secondary is on Node 2 and not on Node 0
@@ -508,7 +518,8 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest2.get(entry.getKey(), null).get(0).getValue()));
-                assertEquals(storeTest0.get(entry.getKey(), null).size(), 0);
+                // TODO: deletion test to add back
+                // assertEquals(storeTest0.get(entry.getKey(), null).size(), 0);
             }
 
             // All servers should be back to normal state
@@ -638,7 +649,8 @@ public class AdminRebalanceTest {
                              new String(storeTest3.get(entry.getKey(), null).get(0).getValue()));
 
                 // Not present on Node 2
-                assertEquals(storeTest2.get(entry.getKey(), null).size(), 0);
+                // TODO: deletion test to add back
+                // assertEquals(storeTest2.get(entry.getKey(), null).size(), 0);
 
                 // Test
                 // Present on Node 0
@@ -658,7 +670,9 @@ public class AdminRebalanceTest {
                              new String(storeTest30.get(entry.getKey(), null).get(0).getValue()));
 
                 // Not present on Node 1
-                assertEquals(storeTest10.get(entry.getKey(), null).size(), 0);
+                // TODO: deletion test to add back
+                // assertEquals(storeTest10.get(entry.getKey(), null).size(),
+                // 0);
 
             }
 
@@ -683,7 +697,8 @@ public class AdminRebalanceTest {
                              new String(storeTest3.get(entry.getKey(), null).get(0).getValue()));
 
                 // Not present on Node 1
-                assertEquals(storeTest1.get(entry.getKey(), null).size(), 0);
+                // TODO: deletion test to add back
+                // assertEquals(storeTest1.get(entry.getKey(), null).size(), 0);
 
                 // Test
                 // Present on Node 3
@@ -695,7 +710,9 @@ public class AdminRebalanceTest {
                              new String(storeTest30.get(entry.getKey(), null).get(0).getValue()));
 
                 // Not present on Node 0
-                assertEquals(storeTest00.get(entry.getKey(), null).size(), 0);
+                // TODO: deletion test to add back
+                // assertEquals(storeTest00.get(entry.getKey(), null).size(),
+                // 0);
 
             }
 
@@ -712,7 +729,8 @@ public class AdminRebalanceTest {
                              new String(storeTest3.get(entry.getKey(), null).get(0).getValue()));
 
                 // Not present on Node 0
-                assertEquals(storeTest0.get(entry.getKey(), null).size(), 0);
+                // TODO: deletion test to add back
+                // assertEquals(storeTest0.get(entry.getKey(), null).size(), 0);
             }
 
             // All servers should be back to normal state
