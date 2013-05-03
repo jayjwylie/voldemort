@@ -277,6 +277,11 @@ public class PartitionPrefixedBdbStorageEngine extends BdbStorageEngine {
     }
 
     @Override
+    public boolean isPartitionAware() {
+        return true;
+    }
+
+    @Override
     public boolean isPartitionScanSupported() {
         return true;
     }
