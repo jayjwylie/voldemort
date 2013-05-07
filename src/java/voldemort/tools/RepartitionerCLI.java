@@ -30,24 +30,16 @@ import org.apache.log4j.Logger;
 import voldemort.cluster.Cluster;
 import voldemort.store.StoreDefinition;
 import voldemort.utils.CmdUtils;
-import voldemort.utils.RepartitionUtils;
+import voldemort.utils.RebalanceUtils;
 import voldemort.utils.Utils;
 import voldemort.xml.ClusterMapper;
 import voldemort.xml.StoreDefinitionsMapper;
 
 import com.google.common.base.Joiner;
 
-public class RepartitionCLI {
+public class RepartitionerCLI {
 
-    private final static Logger logger = Logger.getLogger(RepartitionCLI.class);
-
-    private final static int DEFAULT_REPARTITION_ATTEMPTS = 5;
-    private final static int DEFAULT_RANDOM_SWAP_ATTEMPTS = 100;
-    private final static int DEFAULT_RANDOM_SWAP_SUCCESSES = 100;
-    private final static int DEFAULT_GREEDY_SWAP_ATTEMPTS = 5;
-    private final static int DEFAULT_GREEDY_MAX_PARTITIONS_PER_NODE = 5;
-    private final static int DEFAULT_GREEDY_MAX_PARTITIONS_PER_ZONE = 25;
-    private final static int DEFAULT_MAX_CONTIGUOUS_PARTITIONS = 0;
+    private final static Logger logger = Logger.getLogger(RepartitionerCLI.class);
 
     private static OptionParser parser;
 
@@ -70,7 +62,7 @@ public class RepartitionCLI {
               .describedAs("stores.xml");
         parser.accepts("attempts",
                        "Number of attempts at repartitioning. [ Default: "
-                               + DEFAULT_REPARTITION_ATTEMPTS + " ]")
+                               + Repartitioner.DEFAULT_REPARTITION_ATTEMPTS + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("num-attempts");
@@ -87,13 +79,13 @@ public class RepartitionCLI {
                        "Enable attempts to improve balance by random partition swaps within a zone. [Default: disabled]");
         parser.accepts("random-swap-attempts",
                        "Number of random swaps to attempt. [Default:"
-                               + DEFAULT_RANDOM_SWAP_ATTEMPTS + " ]")
+                               + Repartitioner.DEFAULT_RANDOM_SWAP_ATTEMPTS + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("num-attempts");
         parser.accepts("random-swap-successes",
                        "Number of successful random swaps to permit exit before completing all swap attempts. [Default:"
-                               + DEFAULT_RANDOM_SWAP_SUCCESSES + " ]")
+                               + Repartitioner.DEFAULT_RANDOM_SWAP_SUCCESSES + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("num-successes");
@@ -101,25 +93,26 @@ public class RepartitionCLI {
                        "Enable attempts to improve balance by greedily swapping (random) partitions within a zone. [Default: disabled]");
         parser.accepts("greedy-swap-attempts",
                        "Number of greedy (random) swaps to attempt. [Default:"
-                               + DEFAULT_GREEDY_SWAP_ATTEMPTS + " ]")
+                               + Repartitioner.DEFAULT_GREEDY_SWAP_ATTEMPTS + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("num-attempts");
         parser.accepts("greedy-max-partitions-per-node",
                        "Max number of partitions per-node to evaluate swapping with other partitions within the zone. [Default:"
-                               + DEFAULT_GREEDY_MAX_PARTITIONS_PER_NODE + " ]")
+                               + Repartitioner.DEFAULT_GREEDY_MAX_PARTITIONS_PER_NODE + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("max-partitions-per-node");
         parser.accepts("greedy-max-partitions-per-zone",
                        "Max number of (random) partitions per-zone to evaluate swapping with partitions from node being evaluated. [Default:"
-                               + DEFAULT_GREEDY_MAX_PARTITIONS_PER_ZONE + " ]")
+                               + Repartitioner.DEFAULT_GREEDY_MAX_PARTITIONS_PER_ZONE + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("max-partitions-per-zone");
         parser.accepts("max-contiguous-partitions",
                        "Limit the number of contiguous partition IDs allowed within a zone. [Default:"
-                               + DEFAULT_MAX_CONTIGUOUS_PARTITIONS + " (indicating no limit)]")
+                               + Repartitioner.DEFAULT_MAX_CONTIGUOUS_PARTITIONS
+                               + " (indicating no limit)]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("num-contiguous");
@@ -205,14 +198,18 @@ public class RepartitionCLI {
 
         Cluster currentCluster = new ClusterMapper().readCluster(new File(currentClusterXML));
         List<StoreDefinition> currentStoreDefs = new StoreDefinitionsMapper().readStoreList(new File(currentStoresXML));
+        RebalanceUtils.validateClusterStores(currentCluster, currentStoreDefs);
+
         Cluster targetCluster = new ClusterMapper().readCluster(new File(targetClusterXML));
         List<StoreDefinition> targetStoreDefs = new StoreDefinitionsMapper().readStoreList(new File(targetStoresXML));
+        RebalanceUtils.validateClusterStores(targetCluster, targetStoreDefs);
 
-        // TODO: more verification of arguments:
-        // RebalanceUtils.validateTargetCluster(currentCluster,targetCluster);
+        RebalanceUtils.validateCurrentTargetCluster(currentCluster, targetCluster);
 
         // Optional administrivia args
-        int attempts = CmdUtils.valueOf(options, "attempts", DEFAULT_REPARTITION_ATTEMPTS);
+        int attempts = CmdUtils.valueOf(options,
+                                        "attempts",
+                                        Repartitioner.DEFAULT_REPARTITION_ATTEMPTS);
         String outputDir = null;
         if(options.has("output-dir")) {
             outputDir = (String) options.valueOf("output-dir");
@@ -224,23 +221,23 @@ public class RepartitionCLI {
         boolean enableRandomSwaps = options.has("enable-random-swaps");
         int randomSwapAttempts = CmdUtils.valueOf(options,
                                                   "random-swap-attempts",
-                                                  DEFAULT_RANDOM_SWAP_ATTEMPTS);
+                                                  Repartitioner.DEFAULT_RANDOM_SWAP_ATTEMPTS);
         int randomSwapSuccesses = CmdUtils.valueOf(options,
                                                    "random-swap-successes",
-                                                   DEFAULT_RANDOM_SWAP_SUCCESSES);
+                                                   Repartitioner.DEFAULT_RANDOM_SWAP_SUCCESSES);
         boolean enableGreedySwaps = options.has("enable-greedy-swaps");
         int greedySwapAttempts = CmdUtils.valueOf(options,
                                                   "greedy-swap-attempts",
-                                                  DEFAULT_GREEDY_SWAP_ATTEMPTS);
+                                                  Repartitioner.DEFAULT_GREEDY_SWAP_ATTEMPTS);
         int greedyMaxPartitionsPerNode = CmdUtils.valueOf(options,
                                                           "greedy-max-partitions-per-node",
-                                                          DEFAULT_GREEDY_MAX_PARTITIONS_PER_NODE);
+                                                          Repartitioner.DEFAULT_GREEDY_MAX_PARTITIONS_PER_NODE);
         int greedyMaxPartitionsPerZone = CmdUtils.valueOf(options,
                                                           "greedy-max-partitions-per-zone",
-                                                          DEFAULT_GREEDY_MAX_PARTITIONS_PER_ZONE);
+                                                          Repartitioner.DEFAULT_GREEDY_MAX_PARTITIONS_PER_ZONE);
         int maxContiguousPartitionsPerZone = CmdUtils.valueOf(options,
                                                               "max-contiguous-partitions",
-                                                              DEFAULT_MAX_CONTIGUOUS_PARTITIONS);
+                                                              Repartitioner.DEFAULT_MAX_CONTIGUOUS_PARTITIONS);
 
         // Sanity check optional repartitioning args
         if(disableNodeBalancing && !enableRandomSwaps && !enableGreedySwaps
@@ -255,28 +252,27 @@ public class RepartitionCLI {
            && !enableGreedySwaps) {
             printUsageAndDie("Provided arguments for generate greedy swaps but did not enable the feature");
         }
-        // TODO: If necessary, add options to choose each zone in cluster, all
-        // nodes across cluster, or a list of zone IDs. For now though, just
-        // offer the behavior of greedily swapping among all nodes in cluster.
-        List<Integer> greedyZoneIds = null;
+        // In the future, can add options to choose each zone in cluster, all
+        // nodes across cluster, or a list of zone IDs.
+        List<Integer> greedyZoneIds = Repartitioner.DEFAULT_GREEDY_ZONE_IDS;
 
-        RepartitionUtils.repartition(currentCluster,
-                                     currentStoreDefs,
-                                     targetCluster,
-                                     targetStoreDefs,
-                                     outputDir,
-                                     attempts,
-                                     disableNodeBalancing,
-                                     disableZoneBalancing,
-                                     enableRandomSwaps,
-                                     randomSwapAttempts,
-                                     randomSwapSuccesses,
-                                     enableGreedySwaps,
-                                     greedyZoneIds,
-                                     greedySwapAttempts,
-                                     greedyMaxPartitionsPerNode,
-                                     greedyMaxPartitionsPerZone,
-                                     maxContiguousPartitionsPerZone);
+        Repartitioner.repartition(currentCluster,
+                                  currentStoreDefs,
+                                  targetCluster,
+                                  targetStoreDefs,
+                                  outputDir,
+                                  attempts,
+                                  disableNodeBalancing,
+                                  disableZoneBalancing,
+                                  enableRandomSwaps,
+                                  randomSwapAttempts,
+                                  randomSwapSuccesses,
+                                  enableGreedySwaps,
+                                  greedyZoneIds,
+                                  greedySwapAttempts,
+                                  greedyMaxPartitionsPerNode,
+                                  greedyMaxPartitionsPerZone,
+                                  maxContiguousPartitionsPerZone);
 
     }
 }

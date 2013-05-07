@@ -14,24 +14,24 @@
  * the License.
  */
 
-package voldemort.utils;
+package voldemort.tools;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Logger;
 
 import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
 import voldemort.store.StoreDefinition;
-import voldemort.xml.ClusterMapper;
+import voldemort.utils.ClusterUtils;
+import voldemort.utils.Pair;
+import voldemort.utils.RebalanceUtils;
+import voldemort.utils.Utils;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -41,9 +41,51 @@ import com.google.common.collect.Maps;
  * partitions across a cluster.
  * 
  */
-public class RepartitionUtils {
+public class Repartitioner {
 
-    private static Logger logger = Logger.getLogger(RepartitionUtils.class);
+    static Logger logger = Logger.getLogger(Repartitioner.class);
+
+    /**
+     * Recommended (default) number of times to attempt repartitioning.
+     */
+    public final static int DEFAULT_REPARTITION_ATTEMPTS = 5;
+    /**
+     * Default number of random partition ID swaps to attempt, if random swaps
+     * are enabled.
+     */
+    public final static int DEFAULT_RANDOM_SWAP_ATTEMPTS = 100;
+    /**
+     * Default number of successful random swaps (i.e., the random swap improves
+     * balance) after which reparitioning stops, if random swaps are enabled.
+     */
+    public final static int DEFAULT_RANDOM_SWAP_SUCCESSES = 100;
+    /**
+     * Default number of greedy partition ID swaps to perform, if greedy swaps
+     * are enabled. Each greedy partition ID swaps considers (some number of
+     * partitions per node) X (some number of partitions from rest of cluster)
+     * and selects the best such swap.
+     */
+    public final static int DEFAULT_GREEDY_SWAP_ATTEMPTS = 5;
+    /**
+     * Default setting for which zone IDs to run greedy swap algorithm. null
+     * implies greedily swapping across all zones.
+     */
+    public final static List<Integer> DEFAULT_GREEDY_ZONE_IDS = null;
+    /**
+     * Default (max) number of partition IDs per node to consider, if greedy
+     * swaps are enabled.
+     */
+    public final static int DEFAULT_GREEDY_MAX_PARTITIONS_PER_NODE = 5;
+    /**
+     * Default (max) number of partition IDs from all the other nodes in the
+     * cluster to consider, if greedy swaps are enabled.
+     */
+    public final static int DEFAULT_GREEDY_MAX_PARTITIONS_PER_ZONE = 25;
+    /**
+     * Default limit on length of contiguous partition ID run within a zone. 0
+     * implies no limit on such runs.
+     */
+    public final static int DEFAULT_MAX_CONTIGUOUS_PARTITIONS = 0;
 
     /**
      * Runs a number of distinct algorithms over the specified clusters/store
@@ -63,8 +105,7 @@ public class RepartitionUtils {
      * 
      * This method is used for three key use cases:
      * <ul>
-     * <li>Rebalancing : Distribute partition IDs better for an existing
-     * cluster.
+     * <li>Shuffling : Distribute partition IDs better for an existing cluster.
      * <li>Cluster expansion : Distribute partition IDs to take advantage of new
      * nodes (added to some of the zones).
      * <li>Zone expansion : Distribute partition IDs into a new zone.
@@ -76,14 +117,19 @@ public class RepartitionUtils {
      *        expansion, otherwise pass in same as currentCluster.
      * @param targetStoreDefs target store defs; needed for zone expansion,
      *        otherwise pass in same as currentStores.
-     * @param outputDir
-     * @param attempts
-     * @param disableNodeBalancing
-     * @param disableZoneBalancing
-     * @param enableRandomSwaps
+     * @param outputDir Directory in which to dump cluster xml and analysis
+     *        files.
+     * @param attempts Number of distinct repartitionings to attempt, the best
+     *        of which is returned.
+     * @param disableNodeBalancing Disables the core algorithm that balances
+     *        primaries among nodes within each zone.
+     * @param disableZoneBalancing For the core algorithm that balances
+     *        primaries among nodes in each zone, disable balancing primaries
+     *        among zones.
+     * @param enableRandomSwaps Enables random swap optimization.
      * @param randomSwapAttempts
      * @param randomSwapSuccesses
-     * @param enableGreedySwaps
+     * @param enableGreedySwaps Enables greedy swap optimization.
      * @param greedyZoneIds
      * @param greedySwapAttempts
      * @param greedySwapMaxPartitionsPerNode
@@ -110,10 +156,10 @@ public class RepartitionUtils {
                                       final int greedySwapMaxPartitionsPerNode,
                                       final int greedySwapMaxPartitionsPerZone,
                                       final int maxContiguousPartitionsPerZone) {
-        PartitionBalance partitionBalance = new ClusterInstance(currentCluster, currentStoreDefs).getPartitionBalance();
-        dumpAnalysisToFile(outputDir,
-                           RebalanceUtils.initialClusterFileName + ".analysis",
-                           partitionBalance.toString());
+        PartitionBalance partitionBalance = new PartitionBalance(currentCluster, currentStoreDefs);
+        RebalanceUtils.dumpAnalysisToFile(outputDir,
+                                          RebalanceUtils.currentClusterFileName,
+                                          partitionBalance);
 
         Cluster minCluster = targetCluster;
 
@@ -145,40 +191,40 @@ public class RepartitionUtils {
                                                       new ArrayList<Integer>(targetCluster.getZoneIds()),
                                                       targetStoreDefs);
             }
-
-            if(!validateClusterUpdate(currentCluster, nextCluster)) {
-                System.err.println("The modified cluster does not pass validation. Reverting to initial cluster...");
-                nextCluster = currentCluster;
-            }
+            RebalanceUtils.validateCurrentFinalCluster(currentCluster, nextCluster);
 
             System.out.println("-------------------------\n");
-            partitionBalance = new ClusterInstance(nextCluster, targetStoreDefs).getPartitionBalance();
+            partitionBalance = new PartitionBalance(nextCluster, targetStoreDefs);
             double currentUtility = partitionBalance.getUtility();
             System.out.println("Optimization number " + attempt + ": " + currentUtility
                                + " max/min ratio");
+            System.out.println("-------------------------\n");
+            System.out.println(RebalanceUtils.analyzeInvalidMetadataRate(targetCluster,
+                                                                         currentStoreDefs,
+                                                                         nextCluster,
+                                                                         currentStoreDefs));
 
             if(currentUtility <= minUtility) {
                 minUtility = currentUtility;
                 minCluster = nextCluster;
 
-                dumpClusterToFile(outputDir,
-                                  RebalanceUtils.finalClusterFileName + attempt,
-                                  minCluster);
-                dumpAnalysisToFile(outputDir, RebalanceUtils.finalClusterFileName + attempt
-                                              + ".analysis", partitionBalance.toString());
+                RebalanceUtils.dumpClusterToFile(outputDir, RebalanceUtils.finalClusterFileName
+                                                            + attempt, minCluster);
+                RebalanceUtils.dumpAnalysisToFile(outputDir, RebalanceUtils.finalClusterFileName
+                                                             + attempt, partitionBalance);
             }
             System.out.println("-------------------------\n");
         }
 
         System.out.println("\n==========================");
         System.out.println("Final distribution");
-        partitionBalance = new ClusterInstance(minCluster, targetStoreDefs).getPartitionBalance();
+        partitionBalance = new PartitionBalance(minCluster, targetStoreDefs);
         System.out.println(partitionBalance);
 
-        dumpClusterToFile(outputDir, RebalanceUtils.finalClusterFileName, minCluster);
-        dumpAnalysisToFile(outputDir,
-                           RebalanceUtils.finalClusterFileName + ".analysis",
-                           partitionBalance.toString());
+        RebalanceUtils.dumpClusterToFile(outputDir, RebalanceUtils.finalClusterFileName, minCluster);
+        RebalanceUtils.dumpAnalysisToFile(outputDir,
+                                          RebalanceUtils.finalClusterFileName,
+                                          partitionBalance);
         return minCluster;
     }
 
@@ -196,8 +242,8 @@ public class RepartitionUtils {
                                                                                               Map<Integer, Integer> targetPartitionsPerZone) {
         HashMap<Integer, List<Integer>> numPartitionsPerNode = Maps.newHashMap();
         for(Integer zoneId: targetCluster.getZoneIds()) {
-            List<Integer> partitionsOnNode = peanutButterList(targetCluster.getNumberOfNodesInZone(zoneId),
-                                                              targetPartitionsPerZone.get(zoneId));
+            List<Integer> partitionsOnNode = Utils.distributeEvenlyIntoList(targetCluster.getNumberOfNodesInZone(zoneId),
+                                                                            targetPartitionsPerZone.get(zoneId));
             numPartitionsPerNode.put(zoneId, partitionsOnNode);
         }
         return numPartitionsPerNode;
@@ -254,7 +300,14 @@ public class RepartitionUtils {
         return new Pair<HashMap<Node, Integer>, HashMap<Node, Integer>>(donorNodes, stealerNodes);
     }
 
+    // TODO: (refactor) rename targetCluster -> interimCluster
     /**
+     * This method balances primary partitions among nodes within a zone, and
+     * optionally primary partitions among zones. The balancing is done at the
+     * level of partitionIds. Such partition Id movement may, or may not, result
+     * in data movement during a rebalancing. See RebalancePlan for the object
+     * responsible for determining which partition-stores move where for a
+     * specific repartitioning.
      * 
      * @param targetCluster
      * @param balanceZones indicates whether or not number of primary partitions
@@ -266,8 +319,8 @@ public class RepartitionUtils {
 
         Map<Integer, Integer> targetPartitionsPerZone;
         if(balanceZones) {
-            targetPartitionsPerZone = peanutButterMap(targetCluster.getZoneIds(),
-                                                      targetCluster.getNumberOfPartitions());
+            targetPartitionsPerZone = Utils.distributeEvenlyIntoMap(targetCluster.getZoneIds(),
+                                                                    targetCluster.getNumberOfPartitions());
 
             System.out.println("numPartitionsPerZone");
             for(int zoneId: targetCluster.getZoneIds()) {
@@ -299,7 +352,24 @@ public class RepartitionUtils {
         HashMap<Node, Integer> stealerNodes = donorsAndStealers.getSecond();
         List<Node> stealerNodeKeys = new ArrayList<Node>(stealerNodes.keySet());
 
-        // Go over every stealerNode and steal partitions from donor nodes
+        /*
+         * There is no "intelligence" here about which partition IDs are moved
+         * where. The RebalancePlan object owns determining how to move data
+         * around to meet a specific repartitioning. That said, a little bit of
+         * intelligence here may go a long way. For example, for zone expansion
+         * data could be minimized by:
+         * 
+         * (1) Selecting a minimal # of partition IDs for the new zoneto
+         * minimize how much the ring in existing zones is perturbed;
+         * 
+         * (2) Selecting partitions for the new zone from contiguous runs of
+         * partition IDs in other zones that are not currently n-ary partitions
+         * for other primary partitions;
+         * 
+         * (3) Some combination of (1) and (2)...
+         */
+
+        // Go over every stealerNode and steal partition Ids from donor nodes
         Cluster returnCluster = ClusterUtils.copyCluster(targetCluster);
 
         Collections.shuffle(stealerNodeKeys, new Random(System.currentTimeMillis()));
@@ -429,8 +499,8 @@ public class RepartitionUtils {
                                                  % targetCluster.getNumberOfPartitions());
                     }
                     System.out.println("Contiguous partitions: " + contiguousPartitions);
-                    partitionsToRemoveFromThisZone.addAll(removeItemsToSplitListEvenly(contiguousPartitions,
-                                                                                       maxContiguousPartitionsPerZone));
+                    partitionsToRemoveFromThisZone.addAll(Utils.removeItemsToSplitListEvenly(contiguousPartitions,
+                                                                                             maxContiguousPartitionsPerZone));
                 }
             }
 
@@ -560,16 +630,14 @@ public class RepartitionUtils {
         List<Integer> zoneIds = new ArrayList<Integer>(targetCluster.getZoneIds());
         Cluster returnCluster = ClusterUtils.copyCluster(targetCluster);
 
-        double currentUtility = new ClusterInstance(returnCluster, storeDefs).getPartitionBalance()
-                                                                             .getUtility();
+        double currentUtility = new PartitionBalance(returnCluster, storeDefs).getUtility();
 
         int successes = 0;
         for(int i = 0; i < randomSwapAttempts; i++) {
             Collections.shuffle(zoneIds, new Random(System.currentTimeMillis()));
             for(Integer zoneId: zoneIds) {
                 Cluster shuffleResults = swapRandomPartitionsWithinZone(returnCluster, zoneId);
-                double nextUtility = new ClusterInstance(shuffleResults, storeDefs).getPartitionBalance()
-                                                                                   .getUtility();
+                double nextUtility = new PartitionBalance(shuffleResults, storeDefs).getUtility();
                 if(nextUtility < currentUtility) {
                     System.out.println("Swap improved max-min ratio: " + currentUtility + " -> "
                                        + nextUtility + " (improvement " + successes
@@ -610,8 +678,7 @@ public class RepartitionUtils {
         System.out.println("GreedyRandom : nodeIds:" + nodeIds);
 
         Cluster returnCluster = ClusterUtils.copyCluster(targetCluster);
-        double currentUtility = new ClusterInstance(returnCluster, storeDefs).getPartitionBalance()
-                                                                             .getUtility();
+        double currentUtility = new PartitionBalance(returnCluster, storeDefs).getUtility();
         int nodeIdA = -1;
         int nodeIdB = -1;
         int partitionIdA = -1;
@@ -648,8 +715,7 @@ public class RepartitionUtils {
                                                         partitionIdEh,
                                                         nodeIdBee,
                                                         partitionIdBee);
-                    double swapUtility = new ClusterInstance(swapResult, storeDefs).getPartitionBalance()
-                                                                                   .getUtility();
+                    double swapUtility = new PartitionBalance(swapResult, storeDefs).getUtility();
                     if(swapUtility < currentUtility) {
                         currentUtility = swapUtility;
                         System.out.println(" -> " + currentUtility);
@@ -715,8 +781,7 @@ public class RepartitionUtils {
             return returnCluster;
         }
 
-        double currentUtility = new ClusterInstance(returnCluster, storeDefs).getPartitionBalance()
-                                                                             .getUtility();
+        double currentUtility = new PartitionBalance(returnCluster, storeDefs).getUtility();
 
         for(int i = 0; i < greedyAttempts; i++) {
             Collections.shuffle(zoneIds, new Random(System.currentTimeMillis()));
@@ -736,8 +801,7 @@ public class RepartitionUtils {
                                                                     greedySwapMaxPartitionsPerNode,
                                                                     greedySwapMaxPartitionsPerZone,
                                                                     storeDefs);
-                double nextUtility = new ClusterInstance(shuffleResults, storeDefs).getPartitionBalance()
-                                                                                   .getUtility();
+                double nextUtility = new PartitionBalance(shuffleResults, storeDefs).getUtility();
 
                 if(nextUtility == currentUtility) {
                     System.out.println("Not improving for zone: " + zoneId);
@@ -753,145 +817,6 @@ public class RepartitionUtils {
         }
 
         return returnCluster;
-    }
-
-    /**
-     * Validate that two cluster metadata instances are consistent with one
-     * another. I.e., that they have the same number of partitions. Note that
-     * the Cluster object does additional verification upon construction (e.g.,
-     * that partitions are numbered consecutively) and so there is no risk of
-     * duplicate partitions.
-     * 
-     * @param before cluster metadata before any changes
-     * @param after cluster metadata after any changes
-     * @return false if the 'after' metadata is not consistent with the 'before'
-     *         metadata
-     */
-    public static boolean validateClusterUpdate(final Cluster before, final Cluster after) {
-        if(before.getNumberOfPartitions() != after.getNumberOfPartitions()) {
-            return false;
-        }
-        return true;
-    }
-
-    // TODO: Move to some more generic util class?
-    /**
-     * This method breaks the inputList into distinct lists that are no longer
-     * than maxContiguous in length. It does so by removing elements from the
-     * inputList. This method removes the minimum necessary items to achieve the
-     * goal. This method chooses items to remove that minimize the length of the
-     * maximum remaining run. E.g. given an inputList of 20 elements and
-     * maxContiguous=8, this method will return the 2 elements that break the
-     * inputList into 3 runs of 6 items. (As opposed to 2 elements that break
-     * the inputList into two runs of eight items and one run of two items.)
-     * 
-     * @param inputList The list to be broken into separate runs.
-     * @param maxContiguous The upper limit on sub-list size
-     * @return A list of Integers to be removed from inputList to achieve the
-     *         maxContiguous goal.
-     */
-    public static List<Integer> removeItemsToSplitListEvenly(final List<Integer> inputList,
-                                                             int maxContiguous) {
-        List<Integer> itemsToRemove = new ArrayList<Integer>();
-        int contiguousCount = inputList.size();
-        if(contiguousCount > maxContiguous) {
-            // Determine how many items must be removed to ensure no contig run
-            // longer than maxContiguous
-            int numToRemove = contiguousCount / (maxContiguous + 1);
-            // Breaking in numToRemove places results in numToRemove+1 runs.
-            int numRuns = numToRemove + 1;
-            // Num items left to break into numRuns
-            int numItemsLeft = contiguousCount - numToRemove;
-            // Determine minimum length of each run after items are removed.
-            int floorOfEachRun = numItemsLeft / numRuns;
-            // Determine how many runs need one extra element to evenly
-            // distribute numItemsLeft among all numRuns
-            int numOfRunsWithExtra = numItemsLeft - (floorOfEachRun * numRuns);
-
-            int offset = 0;
-            for(int i = 0; i < numToRemove; ++i) {
-                offset += floorOfEachRun;
-                if(i < numOfRunsWithExtra)
-                    offset++;
-                itemsToRemove.add(inputList.get(offset));
-                offset++;
-            }
-        }
-        return itemsToRemove;
-    }
-
-    // TODO: Move to some more generic util class?
-    /**
-     * This method returns a list that "evenly" (within one) distributes some
-     * number of elements (peanut butter) over some number of buckets (bread
-     * slices).
-     * 
-     * @param breadSlices The number of buckets over which to evenly distribute
-     *        the elements.
-     * @param peanutButter The number of elements to distribute.
-     * @return A list of size breadSlices each integer entry of which indicates
-     *         the number of elements
-     */
-    public static List<Integer> peanutButterList(int breadSlices, int peanutButter) {
-        if(breadSlices < 1) {
-            throw new IllegalArgumentException("Argument breadSlices must be greater than 0 : "
-                                               + breadSlices);
-        }
-        if(peanutButter < 0) {
-            throw new IllegalArgumentException("Argument peanutButter must be zero or more : "
-                                               + peanutButter);
-        }
-        int floorPB = peanutButter / breadSlices;
-        int breadWithMorePB = peanutButter - (breadSlices * floorPB);
-
-        ArrayList<Integer> pbList = new ArrayList<Integer>(breadSlices);
-        for(int i = 0; i < breadWithMorePB; i++) {
-            pbList.add(i, floorPB + 1);
-        }
-        for(int i = breadWithMorePB; i < breadSlices; i++) {
-            pbList.add(i, floorPB);
-        }
-        return pbList;
-    }
-
-    // TODO: Move to some more generic util class?
-    /**
-     * This method returns a map that "evenly" (within one) distributes some
-     * number of elements (peanut butter) over some number of buckets (bread
-     * slices).
-     * 
-     * @param set The collection of objects over which which to evenly
-     *        distribute the elements.
-     * @param peanutButter The number of elements to distribute.
-     * @return A Map with keys specified by breadSlices each integer entry of
-     *         which indicates the number of elements
-     */
-    public static Map<Integer, Integer> peanutButterMap(Set<Integer> breadSlices, int peanutButter) {
-        Map<Integer, Integer> pbMap = new HashMap<Integer, Integer>();
-        List<Integer> pbList = peanutButterList(breadSlices.size(), peanutButter);
-        int offset = 0;
-        for(Integer breadSlice: breadSlices) {
-            pbMap.put(breadSlice, pbList.get(offset));
-            offset++;
-        }
-        return pbMap;
-    }
-
-    public static void dumpClusterToFile(String outputDir, String fileName, Cluster cluster) {
-        if(outputDir != null) {
-            try {
-                FileUtils.writeStringToFile(new File(outputDir, fileName),
-                                            new ClusterMapper().writeCluster(cluster));
-            } catch(Exception e) {}
-        }
-    }
-
-    public static void dumpAnalysisToFile(String outputDir, String fileName, String analysis) {
-        if(outputDir != null) {
-            try {
-                FileUtils.writeStringToFile(new File(outputDir, fileName), analysis);
-            } catch(Exception e) {}
-        }
     }
 
 }
