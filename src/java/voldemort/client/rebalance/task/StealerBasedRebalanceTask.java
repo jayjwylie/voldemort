@@ -7,7 +7,6 @@ import org.apache.log4j.Logger;
 
 import voldemort.VoldemortException;
 import voldemort.client.protocol.admin.AdminClient;
-import voldemort.client.rebalance.RebalanceClientConfig;
 import voldemort.client.rebalance.RebalancePartitionsInfo;
 import voldemort.server.rebalance.AlreadyRebalancingException;
 import voldemort.store.UnreachableStoreException;
@@ -28,13 +27,18 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
     private static final Logger logger = Logger.getLogger(StealerBasedRebalanceTask.class);
 
     private final int stealerNodeId;
+    // TODO: What is the use of maxTries for stealer-based tasks? Need to
+    // validate reason for existence or remove.
+    private final int maxTries;
 
     public StealerBasedRebalanceTask(final int taskId,
                                      final RebalancePartitionsInfo stealInfo,
-                                     final RebalanceClientConfig config,
+                                     final long timeoutSeconds,
+                                     final int maxTries,
                                      final Semaphore donorPermit,
                                      final AdminClient adminClient) {
-        super(taskId, Lists.newArrayList(stealInfo), config, donorPermit, adminClient);
+        super(taskId, Lists.newArrayList(stealInfo), timeoutSeconds, donorPermit, adminClient);
+        this.maxTries = maxTries;
         this.stealerNodeId = stealInfo.getStealerId();
     }
 
@@ -42,7 +46,7 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
         int nTries = 0;
         AlreadyRebalancingException rebalanceException = null;
 
-        while(nTries < config.getMaxTriesRebalancing()) {
+        while(nTries < maxTries) {
             nTries++;
             try {
 
@@ -61,7 +65,7 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
                 adminClient.rpcOps.waitForCompletion(stealerNodeId,
                                                      MetadataStore.SERVER_STATE_KEY,
                                                      VoldemortState.NORMAL_SERVER.toString(),
-                                                     config.getRebalancingClientTimeoutSeconds(),
+                                                     timeoutSeconds,
                                                      TimeUnit.SECONDS);
                 rebalanceException = e;
             }
@@ -71,6 +75,7 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
                                      rebalanceException);
     }
 
+    @Override
     public void run() {
         int rebalanceAsyncId = INVALID_REBALANCE_ID;
 
@@ -85,7 +90,7 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
             // Wait for the task to get over
             adminClient.rpcOps.waitForCompletion(stealerNodeId,
                                                  rebalanceAsyncId,
-                                                 config.getRebalancingClientTimeoutSeconds(),
+                                                 timeoutSeconds,
                                                  TimeUnit.SECONDS);
             RebalanceUtils.printLog(taskId,
                                     logger,

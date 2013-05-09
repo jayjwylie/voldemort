@@ -42,8 +42,6 @@ import voldemort.VoldemortException;
 import voldemort.client.ClientConfig;
 import voldemort.client.protocol.admin.AdminClient;
 import voldemort.client.protocol.admin.AdminClientConfig;
-import voldemort.client.rebalance.RebalanceClusterPlan;
-import voldemort.client.rebalance.RebalanceNodePlan;
 import voldemort.client.rebalance.RebalancePartitionsInfo;
 import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
@@ -178,51 +176,6 @@ public class RebalanceUtils {
                                              + clock + " and on current node " + newClock);
 
         }
-    }
-
-    // TODO: Deprecate in favor of RebalanceClusterPlan.getCrossZoneMoves()
-    /**
-     * Return the number of cross zone copying that is going to take place
-     * 
-     * @param targetCluster Target cluster metadata
-     * @param plan The rebalance plan
-     * @return Number of cross zone moves
-     */
-    @Deprecated
-    public static int getCrossZoneMoves(final Cluster targetCluster, final RebalanceClusterPlan plan) {
-
-        int crossZoneMoves = 0;
-        for(RebalanceNodePlan nodePlan: plan.getRebalancingTaskQueue()) {
-            List<RebalancePartitionsInfo> infos = nodePlan.getRebalanceTaskList();
-            for(RebalancePartitionsInfo info: infos) {
-                Node donorNode = targetCluster.getNodeById(info.getDonorId());
-                Node stealerNode = targetCluster.getNodeById(info.getStealerId());
-
-                if(donorNode.getZoneId() != stealerNode.getZoneId()) {
-                    crossZoneMoves++;
-                }
-            }
-        }
-
-        return crossZoneMoves;
-    }
-
-    // TODO: Deprecate in favor of RebalanceClusterPlan.getTotalMoves()
-    /**
-     * Return the number of total moves
-     * 
-     * @param plan The rebalance plan
-     * @return Number of moves
-     */
-    @Deprecated
-    public static int getTotalMoves(final RebalanceClusterPlan plan) {
-
-        int totalMoves = 0;
-        for(RebalanceNodePlan nodePlan: plan.getRebalancingTaskQueue()) {
-            totalMoves += nodePlan.getRebalanceTaskList().size();
-        }
-
-        return totalMoves;
     }
 
     /**
@@ -849,7 +802,8 @@ public class RebalanceUtils {
      *        definitions
      * @return List of store definitions
      */
-    public static List<StoreDefinition> getStoreDefinition(Cluster cluster, AdminClient adminClient) {
+    public static List<StoreDefinition> getCurrentStoreDefinitions(Cluster cluster,
+                                                                   AdminClient adminClient) {
         List<StoreDefinition> storeDefs = null;
         for(Node node: cluster.getNodes()) {
             List<StoreDefinition> storeDefList = adminClient.metadataMgmtOps.getRemoteStoreDefList(node.getId())
@@ -1100,22 +1054,6 @@ public class RebalanceUtils {
     }
 
     /**
-     * Given a list of node plans flattens it into a list of partitions info
-     * 
-     * @param rebalanceNodePlanList Complete list of rebalance node plan
-     * @return Flattened list of partition plans
-     */
-    public static List<RebalancePartitionsInfo> flattenNodePlans(List<RebalanceNodePlan> rebalanceNodePlanList) {
-        List<RebalancePartitionsInfo> list = new ArrayList<RebalancePartitionsInfo>();
-        for(RebalanceNodePlan rebalanceNodePlan: rebalanceNodePlanList) {
-            for(final RebalancePartitionsInfo stealInfo: rebalanceNodePlan.getRebalanceTaskList()) {
-                list.add(stealInfo);
-            }
-        }
-        return list;
-    }
-
-    /**
      * Given a set of [ replica, partition ] tuples, flatten it to retrieve only
      * the partitions
      * 
@@ -1151,20 +1089,14 @@ public class RebalanceUtils {
 
             // Filter the plans only for stores given
             HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToAddPartitions = info.getStoreToReplicaToAddPartitionList();
-            HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToDeletePartitions = info.getStoreToReplicaToDeletePartitionList();
 
             HashMap<String, HashMap<Integer, List<Integer>>> newStoreToReplicaToAddPartitions = Maps.newHashMap();
-            HashMap<String, HashMap<Integer, List<Integer>>> newStoreToReplicaToDeletePartitions = Maps.newHashMap();
             for(String storeName: storeNames) {
                 if(storeToReplicaToAddPartitions.containsKey(storeName))
                     newStoreToReplicaToAddPartitions.put(storeName,
                                                          storeToReplicaToAddPartitions.get(storeName));
-                if(storeToReplicaToDeletePartitions.containsKey(storeName))
-                    newStoreToReplicaToDeletePartitions.put(storeName,
-                                                            storeToReplicaToDeletePartitions.get(storeName));
             }
             info.setStoreToReplicaToAddPartitionList(newStoreToReplicaToAddPartitions);
-            info.setStoreToReplicaToDeletePartitionList(newStoreToReplicaToDeletePartitions);
 
             plans.add(info);
         }

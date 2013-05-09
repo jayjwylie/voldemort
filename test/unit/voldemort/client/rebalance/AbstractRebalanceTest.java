@@ -74,7 +74,7 @@ public abstract class AbstractRebalanceTest {
     // This method is susceptible to BindException issues due to TOCTOU
     // problem with getLocalCluster (which is used to construct cluster that is
     // passed in).
-    // TODO: Refactor AbstractRebalanceTest to take advantage of
+    // TODO: (refactor) AbstractRebalanceTest to take advantage of
     // ServerTestUtils.startVoldemortCluster.
     protected Cluster startServers(Cluster cluster,
                                    String storeXmlFile,
@@ -176,20 +176,39 @@ public abstract class AbstractRebalanceTest {
         return "tcp://" + node.getHost() + ":" + node.getSocketPort();
     }
 
-    protected void rebalanceAndCheck(Cluster currentCluster,
-                                     Cluster targetCluster,
-                                     List<StoreDefinition> storeDefs,
+    /**
+     * Does the rebalance and then checks that it succeeded.
+     * 
+     * @param rebalancePlan
+     * @param rebalanceClient
+     * @param nodeCheckList
+     */
+    protected void rebalanceAndCheck(RebalancePlan rebalancePlan,
                                      RebalanceController rebalanceClient,
                                      List<Integer> nodeCheckList) {
-        rebalanceClient.rebalance(targetCluster);
-        checkEntriesPostRebalance(currentCluster,
-                                  targetCluster,
-                                  storeDefs,
+        rebalanceClient.rebalance(rebalancePlan);
+        checkEntriesPostRebalance(rebalancePlan.getCurrentCluster(),
+                                  rebalancePlan.getFinalCluster(),
+                                  rebalancePlan.getCurrentStores(),
                                   nodeCheckList,
                                   testEntries,
                                   null);
     }
 
+    /**
+     * Makes sure that all expected partition-stores are on each server after
+     * the rebalance.
+     * 
+     * @param currentCluster
+     * @param targetCluster
+     * @param storeDefs
+     * @param nodeCheckList
+     * @param baselineTuples
+     * @param baselineVersions
+     */
+    // TODO: (atomic cluster/store update) change from storeDefs to
+    // currentStoreDefs and finalStoreDefs to
+    // handle zone expansion/shrink tests.
     protected void checkEntriesPostRebalance(Cluster currentCluster,
                                              Cluster targetCluster,
                                              List<StoreDefinition> storeDefs,

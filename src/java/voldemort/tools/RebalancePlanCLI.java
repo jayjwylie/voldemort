@@ -27,7 +27,6 @@ import joptsimple.OptionSet;
 
 import org.apache.log4j.Logger;
 
-import voldemort.client.rebalance.RebalanceClientConfig;
 import voldemort.client.rebalance.RebalancePlan;
 import voldemort.cluster.Cluster;
 import voldemort.store.StoreDefinition;
@@ -61,10 +60,9 @@ public class RebalancePlanCLI {
                        "Path to target store definition xml. Needed for zone expansion.")
               .withRequiredArg()
               .describedAs("stores.xml");
-        // TODO: Switch default for batch size to infinite.
         parser.accepts("batch",
                        "Number of primary partitions to move together [ Default : "
-                               + RebalanceClientConfig.PRIMARY_PARTITION_BATCH_SIZE + " ]")
+                               + RebalancePlan.BATCH_SIZE + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("num-primary-partitions");
@@ -72,15 +70,12 @@ public class RebalancePlanCLI {
               .withRequiredArg()
               .ofType(String.class)
               .describedAs("path");
-        // TODO: Drop these!!!
-        parser.accepts("donor-based", "Plan donor-based rebalancing.");
-        parser.accepts("stealer-based", "Plan stealer-based rebalancing (default).");
     }
 
     private static void printUsage() {
         StringBuilder help = new StringBuilder();
-        help.append("RepartitionCLI\n");
-        help.append("  Moves partitions to achieve better balance. This can be done for rebalancing (improve balance among existing nodes),"
+        help.append("RebalancePlanCLI\n");
+        help.append("  Moves partitions to achieve better balance. This can be done for shuffling (improve balance among existing nodes),"
                     + " cluster expansion (adding nodes to some zones), and zone expansion (adding an entire new zone).\n");
         help.append("Options:\n");
         help.append("  Required:\n");
@@ -91,7 +86,6 @@ public class RebalancePlanCLI {
         help.append("    --target-stores <storesXML> [ Needed for zone expansion ]\n");
         help.append("    --batch <batch> [ Number of primary partitions to move in each rebalancing batch. ]\n");
         help.append("    --output-dir <outputDir> [ Directory in which cluster metadata is dumped for each batch of the plan. ]\n");
-        help.append("    --stealer-based or --donor-based [ Defaults to stealer-based. ]\n");
 
         try {
             parser.printHelpOn(System.out);
@@ -126,13 +120,11 @@ public class RebalancePlanCLI {
         if(options.has("target-stores") && !options.has("target-cluster")) {
             printUsageAndDie("target-stores specified, but target-cluster not specified.");
         }
-        if(options.has("stealer-based") && options.has("donor-based")) {
-            printUsageAndDie("stealer-based and donor-based are mutually exclusive options.");
-        }
 
         return options;
     }
 
+    // TODO: (refactor) Rename target-cluster target-stores to final-*
     public static void main(String[] args) throws Exception {
         setupParser();
         OptionSet options = getValidOptions(args);
@@ -157,27 +149,17 @@ public class RebalancePlanCLI {
         List<StoreDefinition> targetStoreDefs = new StoreDefinitionsMapper().readStoreList(new File(targetStoresXML));
 
         // Optional args
-        int batchSize = CmdUtils.valueOf(options,
-                                         "batch",
-                                         RebalanceClientConfig.PRIMARY_PARTITION_BATCH_SIZE);
+        int batchSize = CmdUtils.valueOf(options, "batch", RebalancePlan.BATCH_SIZE);
 
         String outputDir = null;
         if(options.has("output-dir")) {
             outputDir = (String) options.valueOf("output-dir");
         }
-        boolean stealerBased = true;
-        if(options.has("donor-based")) {
-            stealerBased = false;
-        }
-
-        RebalanceClientConfig config = new RebalanceClientConfig();
-        config.setPrimaryPartitionBatchSize(batchSize);
 
         new RebalancePlan(currentCluster,
                           currentStoreDefs,
                           targetCluster,
                           targetStoreDefs,
-                          stealerBased,
                           batchSize,
                           outputDir);
     }

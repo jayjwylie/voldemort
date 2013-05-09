@@ -98,9 +98,7 @@ public class ProtoUtils {
         RebalancePartitionsInfo rebalanceStealInfo = new RebalancePartitionsInfo(rebalancePartitionInfoMap.getStealerId(),
                                                                                  rebalancePartitionInfoMap.getDonorId(),
                                                                                  decodePerStorePartitionTuple(rebalancePartitionInfoMap.getReplicaToAddPartitionList()),
-                                                                                 decodePerStorePartitionTuple(rebalancePartitionInfoMap.getReplicaToDeletePartitionList()),
-                                                                                 new ClusterMapper().readCluster(new StringReader(rebalancePartitionInfoMap.getInitialCluster())),
-                                                                                 rebalancePartitionInfoMap.getAttempt());
+                                                                                 new ClusterMapper().readCluster(new StringReader(rebalancePartitionInfoMap.getInitialCluster())));
         return rebalanceStealInfo;
     }
 
@@ -115,9 +113,7 @@ public class ProtoUtils {
                                         .setStealerId(stealInfo.getStealerId())
                                         .setDonorId(stealInfo.getDonorId())
                                         .addAllReplicaToAddPartition(ProtoUtils.encodePerStorePartitionTuple(stealInfo.getStoreToReplicaToAddPartitionList()))
-                                        .addAllReplicaToDeletePartition(ProtoUtils.encodePerStorePartitionTuple(stealInfo.getStoreToReplicaToDeletePartitionList()))
                                         .setInitialCluster(new ClusterMapper().writeCluster(stealInfo.getInitialCluster()))
-                                        .setAttempt(stealInfo.getAttempt())
                                         .build();
     }
 

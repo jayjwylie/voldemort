@@ -102,6 +102,7 @@ public class AdminRebalanceTest {
 
     private final boolean useNio;
 
+    // TODO: should test stealer- and donor-based rebalancing
     public AdminRebalanceTest(boolean useNio) {
         this.useNio = useNio;
     }
@@ -144,12 +145,11 @@ public class AdminRebalanceTest {
                                                         new Properties());
 
         targetCluster = RebalanceUtils.createUpdatedCluster(cluster, 2, Lists.newArrayList(0));
-        RebalanceClusterPlan plan = new RebalanceClusterPlan(cluster,
-                                                             targetCluster,
-                                                             Lists.newArrayList(storeDef1,
-                                                                                storeDef2), true);
-        plans = RebalanceUtils.flattenNodePlans(Lists.newArrayList(plan.getRebalancingTaskQueue()));
 
+        RebalanceBatchPlan plan = new RebalanceBatchPlan(cluster,
+                                                         targetCluster,
+                                                         Lists.newArrayList(storeDef1, storeDef2));
+        plans = Lists.newArrayList(plan.getBatchPlan());
         adminClient = ServerTestUtils.getAdminClient(cluster);
     }
 
@@ -186,12 +186,10 @@ public class AdminRebalanceTest {
                                                         new Properties());
 
         targetCluster = RebalanceUtils.createUpdatedCluster(cluster, 3, Lists.newArrayList(0));
-        RebalanceClusterPlan plan = new RebalanceClusterPlan(cluster,
-                                                             targetCluster,
-                                                             Lists.newArrayList(storeDef1,
-                                                                                storeDef2), true);
-        plans = RebalanceUtils.flattenNodePlans(Lists.newArrayList(plan.getRebalancingTaskQueue()));
-
+        RebalanceBatchPlan plan = new RebalanceBatchPlan(cluster,
+                                                         targetCluster,
+                                                         Lists.newArrayList(storeDef1, storeDef2));
+        plans = Lists.newArrayList(plan.getBatchPlan());
         adminClient = ServerTestUtils.getAdminClient(cluster);
     }
 
@@ -238,12 +236,11 @@ public class AdminRebalanceTest {
                                                         new Properties());
 
         targetCluster = RebalanceUtils.createUpdatedCluster(cluster, 3, Lists.newArrayList(0));
-        RebalanceClusterPlan plan = new RebalanceClusterPlan(cluster,
-                                                             targetCluster,
-                                                             Lists.newArrayList(storeDef1,
-                                                                                storeDef2), true);
-        plans = RebalanceUtils.flattenNodePlans(Lists.newArrayList(plan.getRebalancingTaskQueue()));
+        RebalanceBatchPlan plan = new RebalanceBatchPlan(cluster,
+                                                         targetCluster,
+                                                         Lists.newArrayList(storeDef1, storeDef2));
 
+        plans = Lists.newArrayList(plan.getBatchPlan());
         adminClient = ServerTestUtils.getAdminClient(cluster);
     }
 
@@ -308,11 +305,10 @@ public class AdminRebalanceTest {
 
         targetCluster = RebalanceUtils.createUpdatedCluster(cluster, 3, Lists.newArrayList(0));
         // Make plan only with RO stores
-        RebalanceClusterPlan plan = new RebalanceClusterPlan(cluster,
-                                                             targetCluster,
-                                                             Lists.newArrayList(storeDef1,
-                                                                                storeDef2), true);
-        plans = RebalanceUtils.flattenNodePlans(Lists.newArrayList(plan.getRebalancingTaskQueue()));
+        RebalanceBatchPlan plan = new RebalanceBatchPlan(cluster,
+                                                         targetCluster,
+                                                         Lists.newArrayList(storeDef1, storeDef2));
+        plans = plan.getBatchPlan();
 
         adminClient = ServerTestUtils.getAdminClient(cluster);
 
@@ -422,10 +418,7 @@ public class AdminRebalanceTest {
                                                                                                                           plans.get(0)
                                                                                                                                .getStoreToReplicaToAddPartitionList(),
                                                                                                                           plans.get(0)
-                                                                                                                               .getStoreToReplicaToDeletePartitionList(),
-                                                                                                                          plans.get(0)
-                                                                                                                               .getInitialCluster(),
-                                                                                                                          0))));
+                                                                                                                               .getInitialCluster()))));
 
             try {
                 adminClient.rebalanceOps.rebalanceNode(plans.get(0));
@@ -477,10 +470,8 @@ public class AdminRebalanceTest {
             }
 
             Store<ByteArray, byte[], byte[]> storeTest0 = getStore(0, "test2");
-            Store<ByteArray, byte[], byte[]> storeTest1 = getStore(1, "test2");
             Store<ByteArray, byte[], byte[]> storeTest2 = getStore(2, "test2");
 
-            Store<ByteArray, byte[], byte[]> storeTest00 = getStore(0, "test");
             Store<ByteArray, byte[], byte[]> storeTest20 = getStore(2, "test");
 
             // Primary is on Node 0 and not on Node 1
@@ -491,15 +482,6 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest0.get(entry.getKey(), null).get(0).getValue()));
-                // TODO: Add deletion tests back (and add more deletion tests)
-                // if we
-                // decide to continue to support delete during rebalancing. The
-                // below check is confirming the deletion of a partition-store
-                // which does not currently happen because RebalanceClusterPlan
-                // is in a state that does not handle deletion.
-
-                // TODO: deletion test to add back
-                // assertEquals(storeTest1.get(entry.getKey(), null).size(), 0);
 
                 // Check in other store
                 assertSame("entry should be present in store test2 ",
@@ -508,9 +490,6 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest20.get(entry.getKey(), null).get(0).getValue()));
-                // TODO: deletion test to add back
-                // assertEquals(storeTest00.get(entry.getKey(), null).size(),
-                // 0);
             }
 
             // Secondary is on Node 2 and not on Node 0
@@ -521,8 +500,6 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest2.get(entry.getKey(), null).get(0).getValue()));
-                // TODO: deletion test to add back
-                // assertEquals(storeTest0.get(entry.getKey(), null).size(), 0);
             }
 
             // All servers should be back to normal state
@@ -619,11 +596,9 @@ public class AdminRebalanceTest {
 
             Store<ByteArray, byte[], byte[]> storeTest0 = getStore(0, "test2");
             Store<ByteArray, byte[], byte[]> storeTest1 = getStore(1, "test2");
-            Store<ByteArray, byte[], byte[]> storeTest2 = getStore(2, "test2");
             Store<ByteArray, byte[], byte[]> storeTest3 = getStore(3, "test2");
 
             Store<ByteArray, byte[], byte[]> storeTest00 = getStore(0, "test");
-            Store<ByteArray, byte[], byte[]> storeTest10 = getStore(1, "test");
             Store<ByteArray, byte[], byte[]> storeTest30 = getStore(3, "test");
 
             // Primary
@@ -654,10 +629,6 @@ public class AdminRebalanceTest {
                              new String(entry.getValue()),
                              new String(storeTest3.get(entry.getKey(), null).get(0).getValue()));
 
-                // Not present on Node 2
-                // TODO: deletion test to add back
-                // assertEquals(storeTest2.get(entry.getKey(), null).size(), 0);
-
                 // Test
                 // Present on Node 0
                 assertSame("entry should be present at store",
@@ -674,11 +645,6 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest30.get(entry.getKey(), null).get(0).getValue()));
-
-                // Not present on Node 1
-                // TODO: deletion test to add back
-                // assertEquals(storeTest10.get(entry.getKey(), null).size(),
-                // 0);
 
             }
 
@@ -702,10 +668,6 @@ public class AdminRebalanceTest {
                              new String(entry.getValue()),
                              new String(storeTest3.get(entry.getKey(), null).get(0).getValue()));
 
-                // Not present on Node 1
-                // TODO: deletion test to add back
-                // assertEquals(storeTest1.get(entry.getKey(), null).size(), 0);
-
                 // Test
                 // Present on Node 3
                 assertSame("entry should be present at store",
@@ -714,11 +676,6 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest30.get(entry.getKey(), null).get(0).getValue()));
-
-                // Not present on Node 0
-                // TODO: deletion test to add back
-                // assertEquals(storeTest00.get(entry.getKey(), null).size(),
-                // 0);
 
             }
 
@@ -733,10 +690,6 @@ public class AdminRebalanceTest {
                 assertEquals("entry value should match",
                              new String(entry.getValue()),
                              new String(storeTest3.get(entry.getKey(), null).get(0).getValue()));
-
-                // Not present on Node 0
-                // TODO: deletion test to add back
-                // assertEquals(storeTest0.get(entry.getKey(), null).size(), 0);
             }
 
             // All servers should be back to normal state
@@ -961,9 +914,7 @@ public class AdminRebalanceTest {
                       .update(new RebalancePartitionsInfo(3,
                                                           0,
                                                           new HashMap<String, HashMap<Integer, List<Integer>>>(),
-                                                          new HashMap<String, HashMap<Integer, List<Integer>>>(),
-                                                          cluster,
-                                                          0));
+                                                          cluster));
 
             try {
                 adminClient.rebalanceOps.rebalanceStateChange(cluster,
@@ -1153,9 +1104,7 @@ public class AdminRebalanceTest {
                       .update(new RebalancePartitionsInfo(3,
                                                           0,
                                                           new HashMap<String, HashMap<Integer, List<Integer>>>(),
-                                                          new HashMap<String, HashMap<Integer, List<Integer>>>(),
-                                                          cluster,
-                                                          0));
+                                                          cluster));
 
             try {
                 adminClient.rebalanceOps.rebalanceStateChange(cluster,
@@ -1255,9 +1204,7 @@ public class AdminRebalanceTest {
                       .update(new RebalancePartitionsInfo(3,
                                                           0,
                                                           new HashMap<String, HashMap<Integer, List<Integer>>>(),
-                                                          new HashMap<String, HashMap<Integer, List<Integer>>>(),
-                                                          cluster,
-                                                          0));
+                                                          cluster));
 
             try {
                 adminClient.rebalanceOps.rebalanceStateChange(cluster,

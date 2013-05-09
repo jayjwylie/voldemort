@@ -19,6 +19,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -35,11 +36,24 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
-// TODO: Rename to include PartitionStore in name since the basic unit of work
-// tracked within this class is at the level of partition-stores, not
-// partitions. Maybe "RebalancePartitionStoreTask" is a good name? Though, this
-// class covers all partition-stores that must move between this particular
-// donor/stealer.
+// TODO: Drop this class as part of work to remove replicaType from the code
+// base. Note that this class is serialized over the wire and serialized on disk
+// (in the metadata store on the server). So, dropping this class will be
+// complicated.
+//
+// This class serves a few distinct purposes:
+//
+// 1) In RebalanceClusterPlan, these things are created and the BatchPlan is
+// expressed as a list of these;
+//
+// 2) In RebalanceNodePlan, the work each node does during a batch is expressed
+// as an ordered list of these.
+//
+// 3) Each node keeps a copy of these in its metadata store as part of
+// rebalancing.
+//
+// These use cases should be handled separately. Any other
+// simplification & clarification would be really nice.
 /**
  * Holds the list of partitions being moved / deleted for a stealer-donor node
  * tuple
@@ -49,20 +63,17 @@ public class RebalancePartitionsInfo {
 
     private final int stealerId;
     private final int donorId;
-    // TODO: (refactor) Remove attempt member. setAttempt is never invoked.
-    // Except for MetadataStoreTest which passes in a random value, the value
-    // passed to the constructor for this value is always 0.
-    private int attempt;
+    private HashMap<String, List<Integer>> storeToPartitionIds;
+
     // TODO: (refactor) Unclear what value of the inner Hashmap is. It maps
     // "replica type" to lists of partition IDs. A list of partition IDs (per
     // store) seems sufficient for all purposes. The replica type is a
     // distraction.
+    @Deprecated
     private HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToAddPartitionList;
-    // TODO: Drop the delete stuff? We don't ever use it when we
-    // execute a plan.
-    private HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToDeletePartitionList;
     // TODO: (refactor) What value is maxReplica? Seems like it is used in loops
     // internally. No idea why it is a member.
+    @Deprecated
     private int maxReplica;
     // TODO: (refactor) Does the initialCluster have to be a member? See if it
     // can be removed. There is a getInitialCluster method that is called by
@@ -70,8 +81,11 @@ public class RebalancePartitionsInfo {
     // class? At first glance, all usages of this method are awkward/unclean
     // (i.e., seems like initialCluster could be found through other paths in
     // all cases).
+    @Deprecated
     private Cluster initialCluster;
 
+    // TODO: pre-"flatten" argument storeToReplicaToAddPArtitionList and then
+    // drop. Internally, we transform this struct into something much simpler.
     /**
      * Rebalance Partitions info maintains all information needed for
      * rebalancing for a stealer-donor node tuple
@@ -88,33 +102,33 @@ public class RebalancePartitionsInfo {
      *        order to determine correct key movement for RW stores. Otherwise
      *        we move keys on the basis of the updated metadata and hell breaks
      *        loose.
-     * @param attempt Attempt number
      */
     public RebalancePartitionsInfo(int stealerNodeId,
                                    int donorId,
                                    HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToAddPartitionList,
-                                   HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToDeletePartitionList,
-                                   Cluster initialCluster,
-                                   int attempt) {
+                                   Cluster initialCluster) {
         this.stealerId = stealerNodeId;
         this.donorId = donorId;
-        this.storeToReplicaToAddPartitionList = storeToReplicaToAddPartitionList;
-        this.storeToReplicaToDeletePartitionList = storeToReplicaToDeletePartitionList;
-
-        if(!storeToReplicaToAddPartitionList.keySet()
-                                            .containsAll(storeToReplicaToDeletePartitionList.keySet())) {
-            throw new VoldemortException("Some stores are marked for deletion but are not in the addition list");
-        }
-        this.attempt = attempt;
-        this.maxReplica = 0;
-
-        // Find the max replica number
-        findMaxReplicaType(storeToReplicaToAddPartitionList);
-        findMaxReplicaType(storeToReplicaToDeletePartitionList);
+        setStoreToReplicaToAddPartitionList(storeToReplicaToAddPartitionList);
 
         this.initialCluster = Utils.notNull(initialCluster);
     }
 
+    private void flattenStoreToReplicaToAddPartitionListTOStoreToPartitionIds() {
+        this.storeToPartitionIds = new HashMap<String, List<Integer>>();
+        for(Entry<String, HashMap<Integer, List<Integer>>> entry: storeToReplicaToAddPartitionList.entrySet()) {
+            if(!this.storeToPartitionIds.containsKey(entry.getKey())) {
+                this.storeToPartitionIds.put(entry.getKey(), new LinkedList<Integer>());
+            }
+            List<Integer> storesPartitionIds = this.storeToPartitionIds.get(entry.getKey());
+            for(List<Integer> replicaTypesPartitionIds: entry.getValue().values()) {
+                storesPartitionIds.addAll(replicaTypesPartitionIds);
+            }
+        }
+    }
+
+    // TODO: Get rid of this.
+    @Deprecated
     private void findMaxReplicaType(HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToPartitionList) {
         for(Entry<String, HashMap<Integer, List<Integer>>> entry: storeToReplicaToPartitionList.entrySet()) {
             for(Entry<Integer, List<Integer>> replicaToPartitionList: entry.getValue().entrySet()) {
@@ -139,16 +153,13 @@ public class RebalancePartitionsInfo {
         int stealerId = (Integer) map.get("stealerId");
         int donorId = (Integer) map.get("donorId");
         List<String> unbalancedStoreList = Utils.uncheckedCast(map.get("unbalancedStores"));
-        int attempt = (Integer) map.get("attempt");
         int maxReplicas = (Integer) map.get("maxReplicas");
         Cluster initialCluster = new ClusterMapper().readCluster(new StringReader((String) map.get("initialCluster")));
 
         HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToAddPartition = Maps.newHashMap();
-        HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToDeletePartition = Maps.newHashMap();
         for(String unbalancedStore: unbalancedStoreList) {
 
             HashMap<Integer, List<Integer>> replicaToAddPartition = Maps.newHashMap();
-            HashMap<Integer, List<Integer>> replicaToDeletePartitionList = Maps.newHashMap();
             for(int replicaNo = 0; replicaNo <= maxReplicas; replicaNo++) {
                 List<Integer> partitionList = Utils.uncheckedCast(map.get(unbalancedStore
                                                                           + "replicaToAddPartitionList"
@@ -157,29 +168,16 @@ public class RebalancePartitionsInfo {
                 // rebalancing tests
                 if(partitionList.size() > 0)
                     replicaToAddPartition.put(replicaNo, partitionList);
-
-                List<Integer> deletePartitionList = Utils.uncheckedCast(map.get(unbalancedStore
-                                                                                + "replicaToDeletePartitionList"
-                                                                                + Integer.toString(replicaNo)));
-                // TODO there is a potential NPE hiding here that might fail
-                // rebalancing tests
-                if(deletePartitionList.size() > 0)
-                    replicaToDeletePartitionList.put(replicaNo, deletePartitionList);
             }
 
             if(replicaToAddPartition.size() > 0)
                 storeToReplicaToAddPartition.put(unbalancedStore, replicaToAddPartition);
-
-            if(replicaToDeletePartitionList.size() > 0)
-                storeToReplicaToDeletePartition.put(unbalancedStore, replicaToDeletePartitionList);
         }
 
         return new RebalancePartitionsInfo(stealerId,
                                            donorId,
                                            storeToReplicaToAddPartition,
-                                           storeToReplicaToDeletePartition,
-                                           initialCluster,
-                                           attempt);
+                                           initialCluster);
     }
 
     public synchronized ImmutableMap<String, Object> asMap() {
@@ -189,14 +187,12 @@ public class RebalancePartitionsInfo {
                .put("donorId", donorId)
                .put("unbalancedStores",
                     Lists.newArrayList(storeToReplicaToAddPartitionList.keySet()))
-               .put("attempt", attempt)
                .put("maxReplicas", maxReplica)
                .put("initialCluster", new ClusterMapper().writeCluster(initialCluster));
 
         for(String unbalancedStore: storeToReplicaToAddPartitionList.keySet()) {
 
             HashMap<Integer, List<Integer>> replicaToAddPartition = storeToReplicaToAddPartitionList.get(unbalancedStore);
-            HashMap<Integer, List<Integer>> replicaToDeletePartition = storeToReplicaToDeletePartitionList.get(unbalancedStore);
 
             for(int replicaNum = 0; replicaNum <= maxReplica; replicaNum++) {
 
@@ -209,32 +205,9 @@ public class RebalancePartitionsInfo {
                                         + Integer.toString(replicaNum),
                                 Lists.newArrayList());
                 }
-
-                if(replicaToDeletePartition != null
-                   && replicaToDeletePartition.containsKey(replicaNum)) {
-                    builder.put(unbalancedStore + "replicaToDeletePartitionList"
-                                        + Integer.toString(replicaNum),
-                                replicaToDeletePartition.get(replicaNum));
-                } else {
-                    builder.put(unbalancedStore + "replicaToDeletePartitionList"
-                                        + Integer.toString(replicaNum),
-                                Lists.newArrayList());
-                }
             }
         }
         return builder.build();
-    }
-
-    // TODO: Remove this.
-    @Deprecated
-    public synchronized void setAttempt(int attempt) {
-        this.attempt = attempt;
-    }
-
-    // TODO: Remove this.
-    @Deprecated
-    public synchronized int getAttempt() {
-        return attempt;
     }
 
     public synchronized int getDonorId() {
@@ -245,6 +218,8 @@ public class RebalancePartitionsInfo {
         return stealerId;
     }
 
+    // TODO: Get rid of this.
+    @Deprecated
     public synchronized Cluster getInitialCluster() {
         return initialCluster;
     }
@@ -263,16 +238,6 @@ public class RebalancePartitionsInfo {
             }
         }
 
-        // TODO: Confirm not counting deletes is the correct action.
-        /*-
-         * Do not count deletes. 
-        for(HashMap<Integer, List<Integer>> storeDeletes: storeToReplicaToDeletePartitionList.values()) {
-            for(List<Integer> partitionStoreDeletes: storeDeletes.values()) {
-                count += partitionStoreDeletes.size();
-            }
-        }
-         */
-
         return count;
     }
 
@@ -282,37 +247,47 @@ public class RebalancePartitionsInfo {
      * 
      * @return Set of store names
      */
+    // TODO: Get rid of this.
+    @Deprecated
     public synchronized Set<String> getUnbalancedStoreList() {
         return storeToReplicaToAddPartitionList.keySet();
     }
 
+    // TODO: Get rid of this.
+    @Deprecated
     public synchronized HashMap<String, HashMap<Integer, List<Integer>>> getStoreToReplicaToAddPartitionList() {
         return this.storeToReplicaToAddPartitionList;
     }
 
-    public synchronized HashMap<String, HashMap<Integer, List<Integer>>> getStoreToReplicaToDeletePartitionList() {
-        return this.storeToReplicaToDeletePartitionList;
-    }
-
+    // TODO: Get rid of this.
+    @Deprecated
     public synchronized HashMap<Integer, List<Integer>> getReplicaToAddPartitionList(String storeName) {
         return this.storeToReplicaToAddPartitionList.get(storeName);
     }
 
-    public synchronized HashMap<Integer, List<Integer>> getReplicaToDeletePartitionList(String storeName) {
-        return this.storeToReplicaToDeletePartitionList.get(storeName);
-    }
-
+    // TODO: Get rid of this.
+    @Deprecated
     public synchronized void setStoreToReplicaToAddPartitionList(HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToAddPartitionList) {
         this.storeToReplicaToAddPartitionList = storeToReplicaToAddPartitionList;
-    }
-
-    public synchronized void setStoreToReplicaToDeletePartitionList(HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToDeletePartitionList) {
-        this.storeToReplicaToDeletePartitionList = storeToReplicaToDeletePartitionList;
+        findMaxReplicaType(storeToReplicaToAddPartitionList);
+        flattenStoreToReplicaToAddPartitionListTOStoreToPartitionIds();
     }
 
     public synchronized void removeStore(String storeName) {
         this.storeToReplicaToAddPartitionList.remove(storeName);
-        this.storeToReplicaToDeletePartitionList.remove(storeName);
+        this.storeToPartitionIds.remove(storeName);
+    }
+
+    public synchronized List<Integer> getPartitionIds(String storeName) {
+        return this.storeToPartitionIds.get(storeName);
+    }
+
+    public synchronized Set<String> getPartitionStores() {
+        return this.storeToPartitionIds.keySet();
+    }
+
+    public synchronized void setPartitionIds(String storeName, List<Integer> partitionIds) {
+        this.storeToPartitionIds.put(storeName, partitionIds);
     }
 
     /**
@@ -320,6 +295,8 @@ public class RebalancePartitionsInfo {
      * 
      * @return List of primary partitions
      */
+    // TODO: Get rid of this.
+    @Deprecated
     public synchronized List<Integer> getStealMasterPartitions() {
         Iterator<HashMap<Integer, List<Integer>>> iter = storeToReplicaToAddPartitionList.values()
                                                                                          .iterator();
@@ -343,7 +320,6 @@ public class RebalancePartitionsInfo {
 
             sb.append("\n\t- Store '" + unbalancedStore + "' move ");
             HashMap<Integer, List<Integer>> replicaToAddPartition = storeToReplicaToAddPartitionList.get(unbalancedStore);
-            HashMap<Integer, List<Integer>> replicaToDeletePartition = storeToReplicaToDeletePartitionList.get(unbalancedStore);
 
             for(int replicaNum = 0; replicaNum <= maxReplica; replicaNum++) {
                 if(replicaToAddPartition != null && replicaToAddPartition.containsKey(replicaNum))
@@ -351,16 +327,30 @@ public class RebalancePartitionsInfo {
                 else
                     sb.append(" - []");
             }
-            sb.append(", delete ");
-            for(int replicaNum = 0; replicaNum <= maxReplica; replicaNum++) {
-                if(replicaToDeletePartition != null
-                   && replicaToDeletePartition.containsKey(replicaNum))
-                    sb.append(" - " + replicaToDeletePartition.get(replicaNum));
-                else
-                    sb.append(" - []");
-            }
         }
         sb.append(")");
+        return sb.toString();
+    }
+
+    // TODO: Add javadoc
+    // TODO: move to rebalanceUtils? Or leave here?
+    public static String taskListToString(List<RebalancePartitionsInfo> infos) {
+        StringBuffer sb = new StringBuffer();
+        for(RebalancePartitionsInfo info: infos) {
+            sb.append("\t")
+              .append(info.getDonorId())
+              .append(" -> ")
+              .append(info.getStealerId())
+              .append(" : [");
+            for(String storeName: info.getPartitionStores()) {
+                sb.append("{")
+                  .append(storeName)
+                  .append(" : ")
+                  .append(info.getPartitionIds(storeName))
+                  .append("}");
+            }
+            sb.append("]").append(Utils.NEWLINE);
+        }
         return sb.toString();
     }
 
@@ -382,8 +372,6 @@ public class RebalancePartitionsInfo {
 
         RebalancePartitionsInfo that = (RebalancePartitionsInfo) o;
 
-        if(attempt != that.attempt)
-            return false;
         if(donorId != that.donorId)
             return false;
         if(stealerId != that.stealerId)
@@ -392,9 +380,6 @@ public class RebalancePartitionsInfo {
             return false;
         if(storeToReplicaToAddPartitionList != null ? !storeToReplicaToAddPartitionList.equals(that.storeToReplicaToAddPartitionList)
                                                    : that.storeToReplicaToAddPartitionList != null)
-            return false;
-        if(storeToReplicaToDeletePartitionList != null ? !storeToReplicaToDeletePartitionList.equals(that.storeToReplicaToDeletePartitionList)
-                                                      : that.storeToReplicaToDeletePartitionList != null)
             return false;
 
         return true;
@@ -409,11 +394,6 @@ public class RebalancePartitionsInfo {
                  * result
                  + (storeToReplicaToAddPartitionList != null ? storeToReplicaToAddPartitionList.hashCode()
                                                             : 0);
-        result = 31
-                 * result
-                 + (storeToReplicaToDeletePartitionList != null ? storeToReplicaToDeletePartitionList.hashCode()
-                                                               : 0);
-        result = 31 * result + attempt;
         return result;
     }
 }

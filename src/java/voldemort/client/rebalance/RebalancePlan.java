@@ -41,23 +41,28 @@ import com.google.common.collect.TreeMultimap;
 // TODO: Add a header comment.
 // TODO: Remove stealerBased from the constructor once RebalanceController is
 // switched over to use RebalancePlan. (Or sooner)
-// TODO: Add (simple & basic) tests of RebalancePlan
 public class RebalancePlan {
 
     private static final Logger logger = Logger.getLogger(RebalancePlan.class);
+
+    /**
+     * The number of "primary" partition IDs to move in each batch of the plan.
+     * Moving a primary partition ID between nodes results in between zero and
+     * (# of zones) * (2) * (# stores) partition-stores being moved. The (2)
+     * comes from an upper bound of a single move affecting two-nodes per zone.
+     */
+    public final static int BATCH_SIZE = Integer.MAX_VALUE;
 
     private final Cluster currentCluster;
     private final List<StoreDefinition> currentStores;
     private final Cluster finalCluster;
     private final List<StoreDefinition> finalStores;
-    private final boolean stealerBased;
     private final int batchSize;
     private final String outputDir;
 
-    // TODO: (refactor) Better name than targetCluster? expandedCluster?
-    // specCluster?
+    // TODO: (refactor) Better name than targetCluster? -> interimCluster
     private final Cluster targetCluster;
-    private List<RebalanceClusterPlan> batchPlans;
+    private List<RebalanceBatchPlan> batchPlans;
 
     // Aggregate stats
     private int numPrimaryPartitionMoves;
@@ -70,14 +75,12 @@ public class RebalancePlan {
                          final List<StoreDefinition> currentStores,
                          final Cluster finalCluster,
                          final List<StoreDefinition> finalStores,
-                         boolean stealerBased,
                          int batchSize,
                          String outputDir) {
         this.currentCluster = currentCluster;
         this.currentStores = RebalanceUtils.validateRebalanceStore(currentStores);
         this.finalCluster = finalCluster;
         this.finalStores = RebalanceUtils.validateRebalanceStore(finalStores);
-        this.stealerBased = stealerBased;
         this.batchSize = batchSize;
         this.outputDir = outputDir;
 
@@ -102,7 +105,7 @@ public class RebalancePlan {
                                                               finalStores));
 
         // Initialize the plan
-        batchPlans = new ArrayList<RebalanceClusterPlan>();
+        batchPlans = new ArrayList<RebalanceBatchPlan>();
 
         // Initialize aggregate statistics
         numPrimaryPartitionMoves = 0;
@@ -117,16 +120,9 @@ public class RebalancePlan {
     public RebalancePlan(final Cluster currentCluster,
                          final List<StoreDefinition> currentStores,
                          final Cluster finalCluster,
-                         boolean stealerBased,
                          int batchSize,
                          String outputDir) {
-        this(currentCluster,
-             currentStores,
-             finalCluster,
-             currentStores,
-             stealerBased,
-             batchSize,
-             outputDir);
+        this(currentCluster, currentStores, finalCluster, currentStores, batchSize, outputDir);
     }
 
     /**
@@ -195,19 +191,15 @@ public class RebalancePlan {
                                             "batch-" + Integer.toString(batches) + ".");
 
             // Generate a plan to compute the tasks
-            // TODO: OK to remove option to "delete" from planning?
-            boolean deleteEnabled = false;
-            final RebalanceClusterPlan rebalanceClusterPlan = new RebalanceClusterPlan(batchTargetCluster,
-                                                                                       batchFinalCluster,
-                                                                                       finalStores,
-                                                                                       deleteEnabled,
-                                                                                       stealerBased);
-            batchPlans.add(rebalanceClusterPlan);
+            final RebalanceBatchPlan RebalanceBatchPlan = new RebalanceBatchPlan(batchTargetCluster,
+                                                                                 batchFinalCluster,
+                                                                                 finalStores);
+            batchPlans.add(RebalanceBatchPlan);
 
-            numXZonePartitionStoreMoves += rebalanceClusterPlan.getCrossZonePartitionStoreMoves();
-            numPartitionStoreMoves += rebalanceClusterPlan.getPartitionStoreMoves();
-            nodeMoveMap.add(rebalanceClusterPlan.getNodeMoveMap());
-            zoneMoveMap.add(rebalanceClusterPlan.getZoneMoveMap());
+            numXZonePartitionStoreMoves += RebalanceBatchPlan.getCrossZonePartitionStoreMoves();
+            numPartitionStoreMoves += RebalanceBatchPlan.getPartitionStoreMoves();
+            nodeMoveMap.add(RebalanceBatchPlan.getNodeMoveMap());
+            zoneMoveMap.add(RebalanceBatchPlan.getZoneMoveMap());
 
             batches++;
             batchTargetCluster = mapper.readCluster(new StringReader(mapper.writeCluster(batchFinalCluster)));
@@ -257,11 +249,27 @@ public class RebalancePlan {
         return (sb.toString());
     }
 
+    public Cluster getCurrentCluster() {
+        return currentCluster;
+    }
+
+    public List<StoreDefinition> getCurrentStores() {
+        return currentStores;
+    }
+
+    public Cluster getFinalCluster() {
+        return finalCluster;
+    }
+
+    public List<StoreDefinition> getFinalStores() {
+        return finalStores;
+    }
+
     /**
      * 
      * @return The plan!
      */
-    public List<RebalanceClusterPlan> getPlan() {
+    public List<RebalanceBatchPlan> getPlan() {
         return batchPlans;
     }
 
@@ -289,7 +297,7 @@ public class RebalancePlan {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         // Dump entire plan batch-by-batch, partition info-by-partition info...
-        for(RebalanceClusterPlan batchPlan: batchPlans) {
+        for(RebalanceBatchPlan batchPlan: batchPlans) {
             sb.append(batchPlan).append(Utils.NEWLINE);
         }
         // Dump aggregate stats of the plan
