@@ -51,7 +51,6 @@ public class RebalanceControllerCLI {
         parser.accepts("url", "Url to bootstrap from ").withRequiredArg().describedAs("url");
         parser.accepts("donor-based", "Execute donor-based rebalancing.");
         parser.accepts("stealer-based", "Execute stealer-based rebalancing (default).");
-
         // TODO: Can this option be deprecated?
         parser.accepts("tries",
                        "Tries during stealer-based rebalance [ Default: "
@@ -59,20 +58,12 @@ public class RebalanceControllerCLI {
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("num-tries");
-        // TODO: Can this option be deprecated?
-        parser.accepts("timeout",
-                       "Time-out in seconds for rebalancing of a single task ( stealer - donor tuple ) [ Default : "
-                               + RebalanceController.REBALANCING_CLIENT_TIMEOUT_SEC + " ]")
-              .withRequiredArg()
-              .ofType(Long.class)
-              .describedAs("sec");
         parser.accepts("parallelism",
-                       "Number of rebalances to run in parallel [ Default:"
+                       "Number of servers running stealer- or donor-based tasks in parallel [ Default:"
                                + RebalanceController.MAX_PARALLEL_REBALANCING + " ]")
               .withRequiredArg()
               .ofType(Integer.class)
               .describedAs("parallelism");
-
         parser.accepts("final-cluster", "Path to target cluster xml")
               .withRequiredArg()
               .describedAs("cluster.xml");
@@ -81,7 +72,7 @@ public class RebalanceControllerCLI {
               .withRequiredArg()
               .describedAs("stores.xml");
 
-        parser.accepts("batch",
+        parser.accepts("batch-size",
                        "Number of primary partitions to move together [ RebalancePlan parameter; Default : "
                                + RebalancePlan.BATCH_SIZE + " ]")
               .withRequiredArg()
@@ -104,6 +95,8 @@ public class RebalanceControllerCLI {
         help.append("    --final-cluster <clusterXML>\n");
         help.append("  Optional:\n");
         help.append("    --final-stores <storesXML> [ Needed for zone expansion ]\n");
+        help.append("    --parallelism <parallelism> [ Number of rebalancing tasks to run in parallel ]");
+        help.append("    --tries <tries> [ Number of times to try starting an async rebalancing task on a node ");
         help.append("    --output-dir [ Output directory in which plan is stored ]\n");
         help.append("    --batch <batch> [ Number of primary partitions to move in each rebalancing batch. ]\n");
         help.append("    --output-dir <outputDir> [ Directory in which cluster metadata is dumped for each batch of the plan. ]\n");
@@ -135,7 +128,7 @@ public class RebalanceControllerCLI {
             System.exit(0);
         }
 
-        Set<String> missing = CmdUtils.missing(options, "url", "target-cluster");
+        Set<String> missing = CmdUtils.missing(options, "url", "final-cluster");
         if(missing.size() > 0) {
             printUsageAndDie("Missing required arguments: " + Joiner.on(", ").join(missing));
         }
@@ -166,15 +159,9 @@ public class RebalanceControllerCLI {
             tries = (Integer) options.valueOf("tries");
         }
 
-        long timeout = RebalanceController.REBALANCING_CLIENT_TIMEOUT_SEC;
-        if(options.has("timeout")) {
-            timeout = (Integer) options.valueOf("timeout");
-        }
-
         RebalanceController rebalanceController = new RebalanceController(bootstrapURL,
                                                                           parallelism,
                                                                           tries,
-                                                                          timeout,
                                                                           stealerBased);
 
         Cluster currentCluster = rebalanceController.getCurrentCluster();
@@ -195,7 +182,7 @@ public class RebalanceControllerCLI {
         RebalanceUtils.validateCurrentFinalCluster(currentCluster, finalCluster);
 
         // Process optional "planning" arguments
-        int batchSize = CmdUtils.valueOf(options, "batch", RebalancePlan.BATCH_SIZE);
+        int batchSize = CmdUtils.valueOf(options, "batch-size", RebalancePlan.BATCH_SIZE);
 
         String outputDir = null;
         if(options.has("output-dir")) {

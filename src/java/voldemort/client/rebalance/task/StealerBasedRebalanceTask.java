@@ -1,7 +1,22 @@
+/*
+ * Copyright 2013 LinkedIn, Inc
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
 package voldemort.client.rebalance.task;
 
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.log4j.Logger;
 
@@ -29,15 +44,29 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
     private final int stealerNodeId;
     // TODO: What is the use of maxTries for stealer-based tasks? Need to
     // validate reason for existence or remove.
+    // NOTES FROM VINOTH:
+    // I traced the code down and it seems like this is basically used to
+    // reissue StealerBasedRebalanceTask when it encounters an
+    // AlreadyRebalancingException (which is tied to obtaining a rebalance
+    // permit for the donor node) .. In general, I vote for removing this
+    // parameter.. I think we should have the controller wait/block with a
+    // decent log message if it truly blocked on other tasks to complete... But,
+    // we need to check how likely this retry is saving us grief today and
+    // probably stick to it for sometime, as we stabliize the code base with the
+    // new planner/controller et al...Right way to do this.. Controller simply
+    // submits "work" to the server and servers are mature enough to throttle
+    // and process them as fast as they can. Since that looks like changing all
+    // the server execution frameworks, let's stick with this for now..
+    // TODO: Decide fate of maxTries argument after some integration tests are
+    // done.
     private final int maxTries;
 
     public StealerBasedRebalanceTask(final int taskId,
                                      final RebalancePartitionsInfo stealInfo,
-                                     final long timeoutSeconds,
                                      final int maxTries,
                                      final Semaphore donorPermit,
                                      final AdminClient adminClient) {
-        super(taskId, Lists.newArrayList(stealInfo), timeoutSeconds, donorPermit, adminClient);
+        super(taskId, Lists.newArrayList(stealInfo), donorPermit, adminClient);
         this.maxTries = maxTries;
         this.stealerNodeId = stealInfo.getStealerId();
     }
@@ -64,9 +93,7 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
                                                 + " is currently rebalancing. Waiting till completion");
                 adminClient.rpcOps.waitForCompletion(stealerNodeId,
                                                      MetadataStore.SERVER_STATE_KEY,
-                                                     VoldemortState.NORMAL_SERVER.toString(),
-                                                     timeoutSeconds,
-                                                     TimeUnit.SECONDS);
+                                                     VoldemortState.NORMAL_SERVER.toString());
                 rebalanceException = e;
             }
         }
@@ -86,12 +113,7 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
             donorPermit.acquire();
 
             rebalanceAsyncId = startNodeRebalancing();
-
-            // Wait for the task to get over
-            adminClient.rpcOps.waitForCompletion(stealerNodeId,
-                                                 rebalanceAsyncId,
-                                                 timeoutSeconds,
-                                                 TimeUnit.SECONDS);
+            adminClient.rpcOps.waitForCompletion(stealerNodeId, rebalanceAsyncId);
             RebalanceUtils.printLog(taskId,
                                     logger,
                                     "Succesfully finished rebalance for async operation id "

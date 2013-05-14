@@ -45,6 +45,7 @@ import voldemort.client.protocol.admin.AdminClientConfig;
 import voldemort.client.rebalance.RebalancePartitionsInfo;
 import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
+import voldemort.cluster.Zone;
 import voldemort.routing.RoutingStrategy;
 import voldemort.routing.RoutingStrategyFactory;
 import voldemort.routing.StoreRoutingPlan;
@@ -121,6 +122,10 @@ public class RebalanceUtils {
 
     }
 
+    // TODO: (refactor) Either move all methods that take an AdminClient
+    // somewhere else. Either (i) into a name space of AdminClient or (ii)
+    // separate utils class. Must wait until after all changes for abortable
+    // rebalance & atomic update of cluster/stores are merged to do this change.
     /**
      * Get the latest cluster from all available nodes in the cluster<br>
      * 
@@ -209,8 +214,8 @@ public class RebalanceUtils {
      * @param adminClient Admin client used to query
      * @throws VoldemortRebalancingException if any node is not in normal state
      */
-    public static void validateProdClusterStateIsNormal(final Cluster cluster,
-                                                        final AdminClient adminClient) {
+    public static void checkEachServerInNormalState(final Cluster cluster,
+                                                    final AdminClient adminClient) {
         for(Node node: cluster.getNodes()) {
             Versioned<VoldemortState> versioned = adminClient.rebalanceOps.getRemoteServerState(node.getId());
 
@@ -236,14 +241,22 @@ public class RebalanceUtils {
      */
     public static void validateClusterStores(final Cluster cluster,
                                              final List<StoreDefinition> storeDefs) {
-        // Constructing a PartitionBalance object has the (desirable in this
+        // Constructing a StoreRoutingPlan has the (desirable in this
         // case) side-effect of verifying that the store definition is congruent
         // with the cluster definition. If there are issues, exceptions are
         // thrown.
-        new PartitionBalance(cluster, storeDefs);
+        for(StoreDefinition storeDefinition: storeDefs) {
+            new StoreRoutingPlan(cluster, storeDefinition);
+        }
         return;
     }
 
+    // TODO: This method is biased towards the 3 currently supported use cases:
+    // shuffle, cluster expansion, and zone expansion. There are two other use
+    // cases we need to consider: cluster contraction (reducing # nodes in a
+    // zone) and zone contraction (reducing # of zones). We probably want to end
+    // up pass an enum into this method so we can do proper checks based on use
+    // case.
     /**
      * A final cluster ought to be a super set of current cluster. I.e.,
      * existing node IDs ought to map to same server, but partition layout can
@@ -267,30 +280,30 @@ public class RebalanceUtils {
      * (possibly in new zones) without partitions.
      * 
      * @param currentCluster
-     * @param targetCluster
+     * @param interimCluster
      */
-    public static void validateCurrentTargetCluster(final Cluster currentCluster,
-                                                    final Cluster targetCluster) {
-        validateClusterPartitionCounts(currentCluster, targetCluster);
-        validateClusterNodeState(currentCluster, targetCluster);
-        validateClusterPartitionState(currentCluster, targetCluster);
+    public static void validateCurrentInterimCluster(final Cluster currentCluster,
+                                                     final Cluster interimCluster) {
+        validateClusterPartitionCounts(currentCluster, interimCluster);
+        validateClusterNodeState(currentCluster, interimCluster);
+        validateClusterPartitionState(currentCluster, interimCluster);
 
         return;
     }
 
     /**
-     * Target and final ought to have same partition counts, same zones, and
-     * same node state. Partitions per node may of course differ.
+     * Interim and final clusters ought to have same partition counts, same
+     * zones, and same node state. Partitions per node may of course differ.
      * 
-     * @param targetCluster
+     * @param interimCluster
      * @param finalCluster
      */
-    public static void validateTargetFinalCluster(final Cluster targetCluster,
-                                                  final Cluster finalCluster) {
-        validateClusterPartitionCounts(targetCluster, finalCluster);
-        validateClusterZonesSame(targetCluster, finalCluster);
-        validateClusterNodeCounts(targetCluster, finalCluster);
-        validateClusterNodeState(targetCluster, finalCluster);
+    public static void validateInterimFinalCluster(final Cluster interimCluster,
+                                                   final Cluster finalCluster) {
+        validateClusterPartitionCounts(interimCluster, finalCluster);
+        validateClusterZonesSame(interimCluster, finalCluster);
+        validateClusterNodeCounts(interimCluster, finalCluster);
+        validateClusterNodeState(interimCluster, finalCluster);
         return;
     }
 
@@ -356,7 +369,9 @@ public class RebalanceUtils {
      * @param rhs
      */
     public static void validateClusterZonesSame(final Cluster lhs, final Cluster rhs) {
-        if(lhs.getZones().equals(rhs.getZones()))
+        Set<Zone> lhsSet = new HashSet<Zone>(lhs.getZones());
+        Set<Zone> rhsSet = new HashSet<Zone>(rhs.getZones());
+        if(!lhsSet.equals(rhsSet))
             throw new VoldemortException("Zones are not the same [ lhs cluster zones ("
                                          + lhs.getZones() + ") not equal to rhs cluster zones ("
                                          + rhs.getZones() + ") ]");
@@ -406,17 +421,18 @@ public class RebalanceUtils {
         }
     }
 
+    // TODO: Can getInterimCluster and getClusterWithNewNodes be merged?
     /**
-     * Given the current cluster and final cluster, generates a target cluster
+     * Given the current cluster and final cluster, generates an interim cluster
      * with empty new nodes (and zones).
      * 
      * @param currentCluster Current cluster metadata
      * @param finalCluster Final cluster metadata
-     * @return Returns a new target cluster which contains nodes and zones of
+     * @return Returns a new interim cluster which contains nodes and zones of
      *         final cluster, but with empty partition lists if they were not
      *         present in current cluster.
      */
-    public static Cluster getTargetCluster(Cluster currentCluster, Cluster finalCluster) {
+    public static Cluster getInterimCluster(Cluster currentCluster, Cluster finalCluster) {
         List<Node> newNodeList = new ArrayList<Node>(currentCluster.getNodes());
         for(Node node: finalCluster.getNodes()) {
             if(!ClusterUtils.containsNode(currentCluster, node.getId())) {
@@ -516,105 +532,34 @@ public class RebalanceUtils {
     }
 
     /**
-     * Attempt to propagate a cluster definition to all nodes. Also rollback is
-     * in place in case one of them fails
-     * 
-     * @param adminClient {@link voldemort.client.protocol.admin.AdminClient}
-     *        instance to use.
-     * @param cluster Cluster definition to propagate
-     */
-    public static void propagateCluster(AdminClient adminClient, Cluster cluster) {
-
-        // Contains a mapping of node id to the existing cluster definition
-        HashMap<Integer, Cluster> currentClusters = Maps.newHashMap();
-
-        Versioned<Cluster> latestCluster = new Versioned<Cluster>(cluster);
-        ArrayList<Versioned<Cluster>> clusterList = new ArrayList<Versioned<Cluster>>();
-        clusterList.add(latestCluster);
-
-        for(Node node: cluster.getNodes()) {
-            try {
-                Versioned<Cluster> versionedCluster = adminClient.metadataMgmtOps.getRemoteCluster(node.getId());
-                VectorClock newClock = (VectorClock) versionedCluster.getVersion();
-
-                // Update the current cluster information
-                currentClusters.put(node.getId(), versionedCluster.getValue());
-
-                if(null != newClock && !clusterList.contains(versionedCluster)) {
-                    // check no two clocks are concurrent.
-                    checkNotConcurrent(clusterList, newClock);
-
-                    // add to clock list
-                    clusterList.add(versionedCluster);
-
-                    // update latestClock
-                    Occurred occurred = newClock.compare(latestCluster.getVersion());
-                    if(Occurred.AFTER.equals(occurred))
-                        latestCluster = versionedCluster;
-                }
-
-            } catch(Exception e) {
-                throw new VoldemortException("Failed to get cluster version from node "
-                                             + node.getId(), e);
-            }
-        }
-
-        // Vector clock to propagate
-        VectorClock latestClock = ((VectorClock) latestCluster.getVersion()).incremented(0,
-                                                                                         System.currentTimeMillis());
-
-        // Alright, now try updating the values...
-        Set<Integer> completedNodeIds = Sets.newHashSet();
-        try {
-            for(Node node: cluster.getNodes()) {
-                logger.info("Updating cluster definition on remote node " + node);
-                adminClient.metadataMgmtOps.updateRemoteCluster(node.getId(), cluster, latestClock);
-                logger.info("Updated cluster definition " + cluster + " on remote node "
-                            + node.getId());
-                completedNodeIds.add(node.getId());
-            }
-        } catch(VoldemortException e) {
-            // Fail early...
-            for(Integer completedNodeId: completedNodeIds) {
-                try {
-                    adminClient.metadataMgmtOps.updateRemoteCluster(completedNodeId,
-                                                                    currentClusters.get(completedNodeId),
-                                                                    latestClock);
-                } catch(VoldemortException exception) {
-                    logger.error("Could not revert cluster metadata back on node "
-                                 + completedNodeId);
-                }
-            }
-            throw e;
-        }
-
-    }
-
-    /**
      * For a particular stealer node find all the "primary" <replica, partition>
      * tuples it will steal. In other words, expect the "replica" part to be 0
      * always.
      * 
      * @param currentCluster The cluster definition of the existing cluster
-     * @param targetCluster The target cluster definition
+     * @param finalCluster The target cluster definition
      * @param stealNodeId Node id of the stealer node
      * @return Returns a list of primary partitions which this stealer node will
      *         get
      */
     public static List<Integer> getStolenPrimaryPartitions(final Cluster currentCluster,
-                                                           final Cluster targetCluster,
+                                                           final Cluster finalCluster,
                                                            final int stealNodeId) {
-        List<Integer> targetList = new ArrayList<Integer>(targetCluster.getNodeById(stealNodeId)
-                                                                       .getPartitionIds());
+        List<Integer> finalList = new ArrayList<Integer>(finalCluster.getNodeById(stealNodeId)
+                                                                     .getPartitionIds());
 
         List<Integer> currentList = new ArrayList<Integer>();
-        if(ClusterUtils.containsNode(currentCluster, stealNodeId))
+        if(ClusterUtils.containsNode(currentCluster, stealNodeId)) {
             currentList = currentCluster.getNodeById(stealNodeId).getPartitionIds();
+        } else {
+            if(logger.isDebugEnabled()) {
+                logger.debug("Current cluster does not contain stealer node (cluster : [[["
+                             + currentCluster + "]]], node id " + stealNodeId + ")");
+            }
+        }
+        finalList.removeAll(currentList);
 
-        // remove all current partitions from targetList
-        targetList.removeAll(currentList);
-
-        return targetList;
+        return finalList;
     }
 
     /**
@@ -719,17 +664,17 @@ public class RebalanceUtils {
                 if((replicaPartitionList.size() % zonesWithPartitions != 0)
                    || ((replicaPartitionList.size() / zonesWithPartitions) != (storeDef.getReplicationFactor() / cluster.getNumberOfZones()))) {
 
-                    throw new VoldemortException("Number of replicas returned ("
-                                                 + replicaPartitionList.size()
-                                                 + ") does not make sense given the replication factor ("
-                                                 + storeDef.getReplicationFactor()
-                                                 + ") and that there are "
-                                                 + cluster.getNumberOfZones()
-                                                 + " zones of which "
-                                                 + zonesWithPartitions
-                                                 + " have partitions (and of which "
-                                                 + (cluster.getNumberOfZones() - zonesWithPartitions)
-                                                 + " are empty).");
+                    // For zone expansion & shrinking, this warning is expected
+                    // in some cases. For other use cases (shuffling, cluster
+                    // expansion), this warning indicates that something
+                    // is wrong between the clusters and store defs.
+                    logger.warn("Number of replicas returned (" + replicaPartitionList.size()
+                                + ") does not make sense given the replication factor ("
+                                + storeDef.getReplicationFactor() + ") and that there are "
+                                + cluster.getNumberOfZones() + " zones of which "
+                                + zonesWithPartitions + " have partitions (and of which "
+                                + (cluster.getNumberOfZones() - zonesWithPartitions)
+                                + " are empty).");
                 }
 
                 int replicaType = 0;
@@ -1159,25 +1104,27 @@ public class RebalanceUtils {
         });
     }
 
+    // TODO: (refactor) separate analysis from pretty printing and add a unit
+    // test for the analysis sub-method.
     /**
-     * Compares current cluster with target cluster. Uses pertinent store defs
+     * Compares current cluster with final cluster. Uses pertinent store defs
      * for each cluster to determine if a node that hosts a zone-primary in the
-     * current cluster will no longer host any zone-nary in the target cluster.
+     * current cluster will no longer host any zone-nary in the final cluster.
      * This check is the precondition for a server returning an invalid metadata
      * exception to a client on a normal-case put or get. Normal-case being that
      * the zone-primary receives the pseudo-master put or the get operation.
      * 
      * @param currentCluster
      * @param currentStoreDefs
-     * @param targetCluster
-     * @param targetStoreDefs
+     * @param finalCluster
+     * @param finalStoreDefs
      * @return pretty-printed string documenting invalid metadata rates for each
      *         zone.
      */
     public static String analyzeInvalidMetadataRate(final Cluster currentCluster,
                                                     List<StoreDefinition> currentStoreDefs,
-                                                    final Cluster targetCluster,
-                                                    List<StoreDefinition> targetStoreDefs) {
+                                                    final Cluster finalCluster,
+                                                    List<StoreDefinition> finalStoreDefs) {
         StringBuilder sb = new StringBuilder();
         sb.append("Dump of invalid metadata rates per zone").append(Utils.NEWLINE);
 
@@ -1190,26 +1137,32 @@ public class RebalanceUtils {
               .append(Utils.NEWLINE);
 
             StoreRoutingPlan currentSRP = new StoreRoutingPlan(currentCluster, currentStoreDef);
-            StoreDefinition targetStoreDef = StoreUtils.getStoreDef(targetStoreDefs,
-                                                                    currentStoreDef.getName());
-            StoreRoutingPlan targetSRP = new StoreRoutingPlan(targetCluster, targetStoreDef);
+            StoreDefinition finalStoreDef = StoreUtils.getStoreDef(finalStoreDefs,
+                                                                   currentStoreDef.getName());
+            StoreRoutingPlan finalSRP = new StoreRoutingPlan(finalCluster, finalStoreDef);
 
             // Only care about existing zones
             for(int zoneId: currentCluster.getZoneIds()) {
-                int zoneLocalPrimaries = 0;
+                int zonePrimariesCount = 0;
                 int invalidMetadata = 0;
+
                 // Examine nodes in current cluster in existing zone.
                 for(int nodeId: currentCluster.getNodeIdsInZone(zoneId)) {
-                    for(int partitionId: targetSRP.getZonePrimaryPartitionIds(nodeId)) {
-                        zoneLocalPrimaries++;
-                        if(!currentSRP.getNaryPartitionIds(nodeId).contains(partitionId)) {
+                    // For every zone-primary in current cluster
+                    for(int zonePrimaryPartitionId: currentSRP.getZonePrimaryPartitionIds(nodeId)) {
+                        zonePrimariesCount++;
+                        // Determine if original zone-primary node is still some
+                        // form of n-ary in final cluster. If not,
+                        // InvalidMetadataException will fire.
+                        if(!finalSRP.getZoneNAryPartitionIds(nodeId)
+                                    .contains(zonePrimaryPartitionId)) {
                             invalidMetadata++;
                         }
                     }
                 }
-                float rate = invalidMetadata / (float) zoneLocalPrimaries;
+                float rate = invalidMetadata / (float) zonePrimariesCount;
                 sb.append("\tZone " + zoneId)
-                  .append(" : total zone primaries " + zoneLocalPrimaries)
+                  .append(" : total zone primaries " + zonePrimariesCount)
                   .append(", # that trigger invalid metadata " + invalidMetadata)
                   .append(" => " + rate)
                   .append(Utils.NEWLINE);

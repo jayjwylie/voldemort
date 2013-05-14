@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2009 LinkedIn, Inc
+ * Copyright 2008-2013 LinkedIn, Inc
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -97,17 +97,17 @@ public interface StorageEngine<K, V, T> extends Store<K, V, T> {
     public void truncate();
 
     /**
-     * Is the data persistence aware of partitions? In other words is the data
-     * internally stored on a per partition basis or together
+     * Are partitions persisted in distinct files? In other words is the data
+     * stored on disk on a per-partition basis? This is really for the read-only
+     * use case in which each partition is stored in a distinct file.
      * 
-     * @return Boolean indicating if the data persistence is partition aware
+     * @return Boolean indicating if partitions are persisted in distinct files
+     *         (read-only use case).
      */
     public boolean isPartitionAware();
 
-    // TODO: Does "isPartitionScanSupported() == true" imply
-    // "isPartitionAware() === true"?
     /**
-     * Does the storage engine support efficient scanning of a single partition
+     * Does the storage engine support efficient scanning of a single partition?
      * 
      * @return true if the storage engine implements the capability. false
      *         otherwise

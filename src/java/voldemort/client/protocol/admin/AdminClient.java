@@ -674,7 +674,7 @@ public class AdminClient {
          * @param nodeId Id of the node to poll
          * @param requestId Id of the request to check
          * @param maxWait Maximum time we'll keep checking a request until we
-         *        give up
+         *        give up. Pass in 0 or less to wait "forever".
          * @param timeUnit Unit in which maxWait is expressed.
          * @param higherStatus A higher level async operation object. If this
          *        waiting is being run another async operation this helps us
@@ -689,7 +689,10 @@ public class AdminClient {
                                         TimeUnit timeUnit,
                                         AsyncOperationStatus higherStatus) {
             long delay = INITIAL_DELAY;
-            long waitUntil = System.currentTimeMillis() + timeUnit.toMillis(maxWait);
+            long waitUntil = Long.MAX_VALUE;
+            if(maxWait > 0) {
+                waitUntil = System.currentTimeMillis() + timeUnit.toMillis(maxWait);
+            }
 
             String description = null;
             String oldStatus = "";
@@ -752,6 +755,24 @@ public class AdminClient {
         }
 
         /**
+         * Wait for async task at (remote) nodeId to finish completion, using
+         * exponential backoff to poll the task completion status. Effectively
+         * waits forever.
+         * <p>
+         * 
+         * <i>Logs the status at each status check if debug is enabled.</i>
+         * 
+         * @param nodeId Id of the node to poll
+         * @param requestId Id of the request to check
+         * @return description The final description attached with the response
+         * @throws VoldemortException if task failed to finish in specified
+         *         maxWait time.
+         */
+        public String waitForCompletion(int nodeId, int requestId) {
+            return waitForCompletion(nodeId, requestId, 0, TimeUnit.SECONDS, null);
+        }
+
+        /**
          * Wait till the passed value matches with the metadata value returned
          * by the remote node for the passed key.
          * <p>
@@ -762,7 +783,7 @@ public class AdminClient {
          * @param key metadata key to keep checking for current value
          * @param value metadata value should match for exit criteria.
          * @param maxWait Maximum time we'll keep checking a request until we
-         *        give up
+         *        give up. Pass in 0 or less to wait "forever".
          * @param timeUnit Unit in which maxWait is expressed.
          */
         public void waitForCompletion(int nodeId,
@@ -771,7 +792,10 @@ public class AdminClient {
                                       long maxWait,
                                       TimeUnit timeUnit) {
             long delay = INITIAL_DELAY;
-            long waitUntil = System.currentTimeMillis() + timeUnit.toMillis(maxWait);
+            long waitUntil = Long.MAX_VALUE;
+            if(maxWait > 0) {
+                waitUntil = System.currentTimeMillis() + timeUnit.toMillis(maxWait);
+            }
 
             while(System.currentTimeMillis() < waitUntil) {
                 String currentValue = metadataMgmtOps.getRemoteMetadata(nodeId, key).getValue();
@@ -793,6 +817,21 @@ public class AdminClient {
             throw new VoldemortException("Failed to get matching value " + value + " for key "
                                          + key + " at remote node " + nodeId + " in maximum wait"
                                          + maxWait + " " + timeUnit.toString() + " time.");
+        }
+
+        /**
+         * Wait till the passed value matches with the metadata value returned
+         * by the remote node for the passed key. Effectively waits forever.
+         * <p>
+         * 
+         * <i>Logs the status at each status check if debug is enabled.</i>
+         * 
+         * @param nodeId Id of the node to poll
+         * @param key metadata key to keep checking for current value
+         * @param value metadata value should match for exit criteria.
+         */
+        public void waitForCompletion(int nodeId, String key, String value) {
+            waitForCompletion(nodeId, key, value, 0, TimeUnit.SECONDS);
         }
 
     }
