@@ -36,56 +36,83 @@ import com.google.common.collect.Maps;
 // target or spec or expanded, and final. 'target' has historically been
 // overloaded to mean spec/expanded or final depending on context.
 /**
- * Constructs a batch plan that goes from targetCluster to finalCluster. The
+ * Constructs a batch plan that goes from currentCluster to finalCluster. The
  * partition-stores included in the move are based on those listed in storeDefs.
  * This batch plan is execution-agnostic, i.e., a plan is generated and later
  * stealer- versus donor-based execution of that plan is decided.
+ * 
+ * Long term, its unclear if the notion of RebalanceBatchPlan separate from
+ * RebalancePlan is needed. Batching tends to increase the overall cost of
+ * rebalancing and has historically been error prone. (I.e., the transition
+ * between batches has had intermittent failures.) Its value, if any, lies in
+ * allowing long-running (days or weeks) rebalancing jobs to have interim
+ * checkpoints such that single node failures don't force a restart from initial
+ * state. Should consider deprecating batching after zone expansion and zone
+ * shrinking have been done successfully as short (less than a day or two),
+ * single-batch rebalances.
  */
 public class RebalanceBatchPlan {
 
-    private final Cluster targetCluster;
+    private final Cluster currentCluster;
+    private final List<StoreDefinition> currentStoreDefs;
     private final Cluster finalCluster;
-    private final List<StoreDefinition> storeDefs;
+    private final List<StoreDefinition> finalStoreDefs;
 
     protected final List<RebalancePartitionsInfo> batchPlan;
 
     /**
-     * Compares the targetCluster configuration with the desired finalClsuter
-     * and builds a map of Target node-id to map of source node-ids and
-     * partitions desired to be stolen/fetched.
+     * Develops a batch plan to go from current cluster/stores to final
+     * cluster/stores.
      * 
-     * @param targetCluster The current cluster definition
-     * @param finalCluster The target cluster definition
-     * @param storeDefList The list of store definitions to rebalance
-     * @param enabledDeletePartition Delete the RW partition on the donor side
-     *        after rebalance
-     * @param isStealerBased Do we want to generate the final plan based on the
-     *        stealer node or the donor node?
+     * @param currentCluster
+     * @param currentStoreDefs
+     * @param finalCluster
+     * @param finalStoreDefs
      */
-    public RebalanceBatchPlan(final Cluster targetCluster,
+    public RebalanceBatchPlan(final Cluster currentCluster,
+                              final List<StoreDefinition> currentStoreDefs,
                               final Cluster finalCluster,
-                              final List<StoreDefinition> storeDefs) {
-        this.targetCluster = targetCluster;
+                              final List<StoreDefinition> finalStoreDefs) {
+        this.currentCluster = currentCluster;
+        this.currentStoreDefs = currentStoreDefs;
         this.finalCluster = finalCluster;
-        this.storeDefs = storeDefs;
-        RebalanceUtils.validateTargetFinalCluster(targetCluster, finalCluster);
-        RebalanceUtils.validateClusterStores(targetCluster, storeDefs);
-        RebalanceUtils.validateClusterStores(finalCluster, storeDefs);
+        this.finalStoreDefs = finalStoreDefs;
+        RebalanceUtils.validateCurrentFinalCluster(currentCluster, finalCluster);
+        RebalanceUtils.validateClusterStores(currentCluster, currentStoreDefs);
+        RebalanceUtils.validateClusterStores(finalCluster, finalStoreDefs);
 
-        this.batchPlan = batchPlan();
+        this.batchPlan = constructBatchPlan();
 
     }
 
+    /**
+     * Develops a batch plan to go from current cluster to final cluster for
+     * given stores. (Stores is common for current and final cluster.)
+     * 
+     * @param currentCluster
+     * @param finalCluster
+     * @param commonStoreDefs
+     */
+    public RebalanceBatchPlan(final Cluster currentCluster,
+                              final Cluster finalCluster,
+                              final List<StoreDefinition> commonStoreDefs) {
+        this(currentCluster, commonStoreDefs, finalCluster, commonStoreDefs);
+    }
+
     public Cluster getCurrentCluster() {
-        return targetCluster;
+        return currentCluster;
+    }
+
+    public List<StoreDefinition> getCurrentStoreDefs() {
+        return currentStoreDefs;
     }
 
     public Cluster getFinalCluster() {
         return finalCluster;
     }
 
-    public List<StoreDefinition> getStoreDefs() {
-        return storeDefs;
+    public List<StoreDefinition> getFinalStoreDefs() {
+        return finalStoreDefs;
     }
 
     public List<RebalancePartitionsInfo> getBatchPlan() {
@@ -114,6 +141,11 @@ public class RebalanceBatchPlan {
         return moveMap;
     }
 
+    /**
+     * Determines total number of partition-stores moved across zones.
+     * 
+     * @return number of cross zone partition-store moves
+     */
     public int getCrossZonePartitionStoreMoves() {
         int xzonePartitionStoreMoves = 0;
         for(RebalancePartitionsInfo info: batchPlan) {
@@ -190,7 +222,7 @@ public class RebalanceBatchPlan {
                 result.add(new RebalancePartitionsInfo(stealerDonor.getFirst(),
                                                        stealerDonor.getSecond(),
                                                        stealerDonorToStoreToStealPartition.get(stealerDonor),
-                                                       targetCluster));
+                                                       currentCluster));
             }
             return result;
         }
@@ -202,29 +234,24 @@ public class RebalanceBatchPlan {
      * 
      * 1) A stealer node does not steal any partition-stores it already hosts.
      * 
-     * 2) If possible, a stealer node that is the n-ary zone replica in the
-     * finalCluster steals from the n-ary zone replica in the targetCluster in
-     * the same zone.
+     * 2) Use current policy to decide which node to steal from: see getDonorId
+     * method.
      * 
-     * 3) If there are no partitoin-stores to steal in the same zone (i.e., this
-     * is the "zone expansion" use case), then the stealer node that is the
-     * n-ary zone replica in the finalCluster determines which pre-existing zone
-     * in the targetCluster hosts the primary partitionId for the
-     * partition-store and steals the n-ary zone replica from that zone.
-     * 
-     * In summary, this batch plan avoids all unnecessary cross zone moves,
+     * Currently, this batch plan avoids all unnecessary cross zone moves,
      * distributes cross zone moves into new zones evenly across existing zones,
      * and copies replicaFactor partition-stores into any new zone.
      * 
      * @return the batch plan
      */
-    private List<RebalancePartitionsInfo> batchPlan() {
+    private List<RebalancePartitionsInfo> constructBatchPlan() {
         // Construct all store routing plans once.
         HashMap<String, StoreRoutingPlan> targetStoreRoutingPlans = new HashMap<String, StoreRoutingPlan>();
-        HashMap<String, StoreRoutingPlan> finalStoreRoutingPlans = new HashMap<String, StoreRoutingPlan>();
-        for(StoreDefinition storeDef: storeDefs) {
-            targetStoreRoutingPlans.put(storeDef.getName(), new StoreRoutingPlan(targetCluster,
+        for(StoreDefinition storeDef: currentStoreDefs) {
+            targetStoreRoutingPlans.put(storeDef.getName(), new StoreRoutingPlan(currentCluster,
                                                                                  storeDef));
+        }
+        HashMap<String, StoreRoutingPlan> finalStoreRoutingPlans = new HashMap<String, StoreRoutingPlan>();
+        for(StoreDefinition storeDef: finalStoreDefs) {
             finalStoreRoutingPlans.put(storeDef.getName(), new StoreRoutingPlan(finalCluster,
                                                                                 storeDef));
         }
@@ -236,39 +263,29 @@ public class RebalanceBatchPlan {
             int stealerNodeId = stealerNode.getId();
 
             // Consider all store definitions ...
-            for(StoreDefinition storeDef: storeDefs) {
+            for(StoreDefinition storeDef: finalStoreDefs) {
                 StoreRoutingPlan targetSRP = targetStoreRoutingPlans.get(storeDef.getName());
                 StoreRoutingPlan finalSRP = finalStoreRoutingPlans.get(storeDef.getName());
-                for(int stealerPartitionId: finalSRP.getNaryPartitionIds(stealerNodeId)) {
-                    // ... and all nary partition-stores
-                    // steal what is needed!
+                for(int stealerPartitionId: finalSRP.getZoneNAryPartitionIds(stealerNodeId)) {
+                    // ... and all nary partition-stores,
+                    // now steal what is needed
 
-                    // Do not steal a partition-store you host
+                    // Optimization: Do not steal a partition-store you already
+                    // host!
                     if(targetSRP.getReplicationNodeList(stealerPartitionId).contains(stealerNodeId)) {
                         continue;
                     }
 
-                    int stealerZoneReplicaType = finalSRP.getZoneReplicaType(stealerZoneId,
-                                                                             stealerNodeId,
-                                                                             stealerPartitionId);
+                    // Determine which node to steal from.
+                    int donorNodeId = getDonorId(targetSRP,
+                                                 finalSRP,
+                                                 stealerZoneId,
+                                                 stealerNodeId,
+                                                 stealerPartitionId);
 
-                    int donorZoneId;
-                    if(targetSRP.hasZoneReplicaType(stealerZoneId, stealerPartitionId)) {
-                        // Steal from local n-ary (since one exists).
-                        donorZoneId = stealerZoneId;
-                    } else {
-                        // Steal from zone that hosts primary partition Id.
-                        // TODO: Add option to steal from specific
-                        // donorZoneId.
-                        int targetMasterNodeId = targetSRP.getNodeIdForPartitionId(stealerPartitionId);
-                        donorZoneId = targetCluster.getNodeById(targetMasterNodeId).getZoneId();
-                    }
-
-                    int donorNodeId = targetSRP.getZoneReplicaNodeId(donorZoneId,
-                                                                     stealerZoneReplicaType,
-                                                                     stealerPartitionId);
+                    // Add this specific partition-store steal to the overall
+                    // plan
                     int donorReplicaType = targetSRP.getReplicaType(donorNodeId, stealerPartitionId);
-
                     rpiBuilder.addPartitionStoreMove(stealerNodeId,
                                                      donorNodeId,
                                                      storeDef.getName(),
@@ -279,6 +296,77 @@ public class RebalanceBatchPlan {
         }
 
         return rpiBuilder.buildRebalancePartitionsInfos();
+    }
+
+    /**
+     * Decide which donor node to steal from. This is a policy implementation.
+     * I.e., in the future, additional policies could be considered. At that
+     * time, this method should be overridden in a sub-class, or a policy object
+     * ought to implement this algorithm.
+     * 
+     * Current policy:
+     * 
+     * 1) If possible, a stealer node that is the zone n-ary in the finalCluster
+     * steals from the zone n-ary in the targetCluster in the same zone.
+     * 
+     * 2) If there are no partition-stores to steal in the same zone (i.e., this
+     * is the "zone expansion" use case), then a differnt policy must be used.
+     * The stealer node that is the zone n-ary in the finalCluster determines
+     * which pre-existing zone in the targetCluster hosts the primary partition
+     * id for the partition-store. The stealer then steals the zone n-ary from
+     * that pre-existing zone.
+     * 
+     * This policy avoids unnecessary cross-zone moves and distributes the load
+     * of cross-zone moves approximately-uniformly across pre-existing zones.
+     * 
+     * Other policies to consider:
+     * 
+     * - For zone expansion, steal all partition-stores from one specific
+     * pre-existing zone.
+     * 
+     * - Replace heuristic to approximately uniformly distribute load among
+     * existing zones to something more concrete (i.e. track steals from each
+     * pre-existing zone and forcibly balance them).
+     * 
+     * - Select a single donor for all replicas in a new zone. This will require
+     * donor-based rebalancing to be run (at least for this specific part of the
+     * plan). This would reduce the number of donor-side scans of data. (But
+     * still send replication factor copies over the WAN.) This would require
+     * apparatus in the RebalanceController to work.
+     * 
+     * - Set up some sort of chain-replication in which a single stealer in the
+     * new zone steals some replica from a pre-exising zone, and then other
+     * n-aries in the new zone steal from the single cross-zone stealer in the
+     * zone. This would require apparatus in the RebalanceController to work.
+     * 
+     * @param targetSRP
+     * @param finalSRP
+     * @param stealerZoneId
+     * @param stealerNodeId
+     * @param stealerPartitionId
+     * @return the node id of the donor for this partition Id.
+     */
+    protected int getDonorId(StoreRoutingPlan targetSRP,
+                             StoreRoutingPlan finalSRP,
+                             int stealerZoneId,
+                             int stealerNodeId,
+                             int stealerPartitionId) {
+        int stealerZoneNAry = finalSRP.getZoneNaryForNodesPartition(stealerZoneId,
+                                                                    stealerNodeId,
+                                                                    stealerPartitionId);
+
+        int donorZoneId;
+        if(targetSRP.zoneNAryExists(stealerZoneId, stealerZoneNAry, stealerPartitionId)) {
+            // Steal from local n-ary (since one exists).
+            donorZoneId = stealerZoneId;
+        } else {
+            // Steal from zone that hosts primary partition Id.
+            int targetMasterNodeId = targetSRP.getNodeIdForPartitionId(stealerPartitionId);
+            donorZoneId = currentCluster.getNodeById(targetMasterNodeId).getZoneId();
+        }
+
+        return targetSRP.getNodeIdForZoneNary(donorZoneId, stealerZoneNAry, stealerPartitionId);
+
     }
 
     @Override

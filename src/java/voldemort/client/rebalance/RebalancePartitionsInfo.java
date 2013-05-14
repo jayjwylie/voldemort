@@ -114,7 +114,7 @@ public class RebalancePartitionsInfo {
         this.initialCluster = Utils.notNull(initialCluster);
     }
 
-    private void flattenStoreToReplicaToAddPartitionListTOStoreToPartitionIds() {
+    private void flattenStoreToReplicaTypeToAddPartitionListTOStoreToPartitionIds() {
         this.storeToPartitionIds = new HashMap<String, List<Integer>>();
         for(Entry<String, HashMap<Integer, List<Integer>>> entry: storeToReplicaToAddPartitionList.entrySet()) {
             if(!this.storeToPartitionIds.containsKey(entry.getKey())) {
@@ -270,7 +270,7 @@ public class RebalancePartitionsInfo {
     public synchronized void setStoreToReplicaToAddPartitionList(HashMap<String, HashMap<Integer, List<Integer>>> storeToReplicaToAddPartitionList) {
         this.storeToReplicaToAddPartitionList = storeToReplicaToAddPartitionList;
         findMaxReplicaType(storeToReplicaToAddPartitionList);
-        flattenStoreToReplicaToAddPartitionListTOStoreToPartitionIds();
+        flattenStoreToReplicaTypeToAddPartitionListTOStoreToPartitionIds();
     }
 
     public synchronized void removeStore(String storeName) {
@@ -332,8 +332,12 @@ public class RebalancePartitionsInfo {
         return sb.toString();
     }
 
-    // TODO: Add javadoc
-    // TODO: move to rebalanceUtils? Or leave here?
+    /**
+     * Pretty prints a task list of rebalancing tasks.
+     * 
+     * @param infos list of rebalancing tasks (RebalancePartitiosnInfo)
+     * @return pretty-printed string
+     */
     public static String taskListToString(List<RebalancePartitionsInfo> infos) {
         StringBuffer sb = new StringBuffer();
         for(RebalancePartitionsInfo info: infos) {

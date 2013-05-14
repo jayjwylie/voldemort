@@ -1,5 +1,5 @@
 /*
- * 2013 LinkedIn, Inc
+ * Copyright 2013 LinkedIn, Inc
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -13,6 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
+
 package voldemort;
 
 import java.util.ArrayList;
@@ -22,6 +23,10 @@ import java.util.LinkedList;
 import java.util.List;
 
 import voldemort.client.RoutingTier;
+import voldemort.client.rebalance.RebalanceBatchPlan;
+import voldemort.client.rebalance.RebalanceController;
+import voldemort.client.rebalance.RebalancePartitionsInfo;
+import voldemort.client.rebalance.RebalancePlan;
 import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
 import voldemort.cluster.Zone;
@@ -36,8 +41,6 @@ import com.google.common.collect.Lists;
 
 public class ClusterTestUtils {
 
-    // TODO: Move these storeDefs and cluster helper test methods into
-    // ClusterTestUtils.
     public static List<StoreDefinition> getZZ111StoreDefs(String storageType) {
 
         List<StoreDefinition> storeDefs = new LinkedList<StoreDefinition>();
@@ -107,21 +110,50 @@ public class ClusterTestUtils {
         return storeDefs;
     }
 
+    public static List<StoreDefinition> getZZ322StoreDefsWithNonContiguousZoneIds(String storageType) {
+
+        List<StoreDefinition> storeDefs = new LinkedList<StoreDefinition>();
+        HashMap<Integer, Integer> zoneRep322 = new HashMap<Integer, Integer>();
+        zoneRep322.put(0, 3);
+        zoneRep322.put(2, 3);
+        StoreDefinition storeDef322 = new StoreDefinitionBuilder().setName("ZZ322")
+                                                                  .setType(storageType)
+                                                                  .setRoutingPolicy(RoutingTier.CLIENT)
+                                                                  .setRoutingStrategyType(RoutingStrategyType.ZONE_STRATEGY)
+                                                                  .setKeySerializer(new SerializerDefinition("string"))
+                                                                  .setValueSerializer(new SerializerDefinition("string"))
+                                                                  .setReplicationFactor(6)
+                                                                  .setZoneReplicationFactor(zoneRep322)
+                                                                  .setRequiredReads(2)
+                                                                  .setRequiredWrites(2)
+                                                                  .setZoneCountReads(0)
+                                                                  .setZoneCountWrites(0)
+                                                                  .build();
+        storeDefs.add(storeDef322);
+        return storeDefs;
+    }
+
     /**
      * Store defs for zoned clusters with 2 zones. Covers the three store
      * definitions of interest: 3/2/2, 2/1/1, and
      */
     public static List<StoreDefinition> getZZStoreDefsInMemory() {
         List<StoreDefinition> storeDefs = new LinkedList<StoreDefinition>();
-        storeDefs.addAll(ClusterTestUtils.getZZ111StoreDefs(InMemoryStorageConfiguration.TYPE_NAME));
+        storeDefs.addAll(getZZ111StoreDefs(InMemoryStorageConfiguration.TYPE_NAME));
         storeDefs.addAll(getZZ211StoreDefs(InMemoryStorageConfiguration.TYPE_NAME));
         storeDefs.addAll(getZZ322StoreDefs(InMemoryStorageConfiguration.TYPE_NAME));
         return storeDefs;
     }
 
+    public static List<StoreDefinition> getZZStoreDefsWithNonContiguousZoneIDsInMemory() {
+        List<StoreDefinition> storeDefs = new LinkedList<StoreDefinition>();
+        storeDefs.addAll(getZZ322StoreDefsWithNonContiguousZoneIds(InMemoryStorageConfiguration.TYPE_NAME));
+        return storeDefs;
+    }
+
     public static List<StoreDefinition> getZZStoreDefsBDB() {
         List<StoreDefinition> storeDefs = new LinkedList<StoreDefinition>();
-        storeDefs.addAll(ClusterTestUtils.getZZ111StoreDefs(BdbStorageConfiguration.TYPE_NAME));
+        storeDefs.addAll(getZZ111StoreDefs(BdbStorageConfiguration.TYPE_NAME));
         storeDefs.addAll(getZZ211StoreDefs(BdbStorageConfiguration.TYPE_NAME));
         storeDefs.addAll(getZZ322StoreDefs(BdbStorageConfiguration.TYPE_NAME));
         return storeDefs;
@@ -224,6 +256,24 @@ public class ClusterTestUtils {
     // partitions is also intentional (i.e., some servers having more
     // partitions, and some zones having contiguous runs of partitions).
 
+    // NOTE: We want nodes returned from various get??Cluster?? methods that
+    // have the same ID to have the same ports. These static variables are used
+    // for this purpose.
+    static final private int MAX_NODES_IN_TEST_CLUSTER = 12;
+    static private int clusterPorts[] = null;
+
+    /**
+     * Possibly sets, via freeports, clusterPorts, then returns
+     * 
+     * @return ports for use in the cluster.
+     */
+    static private int[] getClusterPorts() {
+        if(clusterPorts == null) {
+            clusterPorts = ServerTestUtils.findFreePorts(MAX_NODES_IN_TEST_CLUSTER * 3);
+        }
+        return clusterPorts;
+    }
+
     /**
      * The 'Z' and 'E' prefixes in these method names indicate zones with
      * partitions and zones without partitions.
@@ -233,7 +283,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 1, 7, 15 }, { 2, 8, 14 },
                 { 3, 9, 13 }, { 4, 10 }, { 5, 11 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZClusterWithExtraPartitions() {
@@ -241,7 +294,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 1, 7, 15 }, { 2, 8, 14 },
                 { 3, 9, 13 }, { 4, 10 }, { 5, 11, 18 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZClusterWithSwappedPartitions() {
@@ -249,7 +305,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 } };
         int partitionMap[][] = new int[][] { { 0, 6, 16, 17 }, { 1, 7, 15 }, { 2, 8, 11, 14 },
                 { 3, 9, 13 }, { 4, 10 }, { 5, 12 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZZCluster() {
@@ -257,15 +316,21 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 }, { 6, 7, 8 } };
         int partitionMap[][] = new int[][] { { 0, 9, 15, 16, 17 }, { 1, 10 }, { 2, 11 }, { 3, 12 },
                 { 4, 13 }, { 5, 14 }, { 6 }, { 7 }, { 8 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZZClusterWithSwappedPartitions() {
         int numberOfZones = 3;
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 }, { 6, 7, 8 } };
-        int partitionMap[][] = new int[][] { { 0, 9, 17 }, { 1, 10 }, { 2, 11 }, { 3, 12 },
-                { 4, 13 }, { 5, 14 }, { 6 }, { 7, 15 }, { 8, 16 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        int partitionMap[][] = new int[][] { { 0, 9, 17 }, { 1, 5, 10 }, { 2, 11 }, { 3, 12 },
+                { 4, 13 }, { 14 }, { 6 }, { 7, 15 }, { 8, 16 } };
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZECluster() {
@@ -273,7 +338,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 } };
         int partitionMap[][] = new int[][] { { 0, 1, 6, 7, 12, 13, 16, 17 },
                 { 2, 3, 8, 9, 14, 15 }, { 4, 5, 10, 11 }, {}, {}, {} };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZEZCluster() {
@@ -281,7 +349,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 6, 7, 8 }, { 3, 4, 5 } };
         int partitionMap[][] = new int[][] { { 0, 9, 6, 17 }, { 1, 10, 15 }, { 2, 11, 7 }, {}, {},
                 {}, { 3, 12, 16 }, { 4, 13, 8 }, { 5, 14 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZECluster() {
@@ -289,7 +360,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 }, { 6, 7, 8 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 1, 7, 15 }, { 2, 8, 14 },
                 { 3, 9, 13 }, { 4, 10 }, { 5, 11 }, {}, {}, {} };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     /**
@@ -301,7 +375,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2, 6 }, { 3, 4, 5, 7 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 1, 7, 15 }, { 2, 8, 14 }, {},
                 { 3, 9, 13 }, { 4, 10 }, { 5, 11 }, {} };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZClusterWithNNWithSwappedNodeIds() {
@@ -309,7 +386,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 6, 2 }, { 3, 4, 5, 7 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 1, 7, 15 }, { 2, 8, 14 }, {},
                 { 3, 9, 13 }, { 4, 10 }, { 5, 11 }, {} };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZZClusterWithNNN() {
@@ -317,7 +397,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2, 9 }, { 3, 4, 5, 10 }, { 6, 7, 8, 11 } };
         int partitionMap[][] = new int[][] { { 0, 9, 15, 16, 17 }, { 1, 10 }, { 2, 11 }, {},
                 { 3, 12 }, { 4, 13 }, { 5, 14 }, {}, { 6 }, { 7 }, { 8 }, {} };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZEZClusterWithXNN() {
@@ -325,7 +408,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 6, 7, 8 }, { 3, 4, 5, 9 } };
         int partitionMap[][] = new int[][] { { 0, 9, 6, 17 }, { 1, 10, 15 }, { 2, 11, 7 }, {}, {},
                 {}, { 3, 12, 16 }, { 4, 13, 8 }, { 5, 14 }, {} };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     /**
@@ -338,7 +424,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2, 6 }, { 3, 4, 5, 7 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 7, 13 }, { 8, 14 }, { 1, 2 },
                 { 9, 15 }, { 10 }, { 5, 11 }, { 3, 4 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZClusterWithPPWithSwappedNodeIds() {
@@ -346,7 +435,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 6, 2 }, { 3, 4, 5, 7 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 7, 13 }, { 8, 14 }, { 1, 2 },
                 { 9, 15 }, { 10 }, { 5, 11 }, { 3, 4 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZClusterWithPPWithTooManyNodes() {
@@ -354,7 +446,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 6, 2 }, { 3, 4, 5, 7, 8 } };
         int partitionMap[][] = new int[][] { { 0, 6, 12, 16, 17 }, { 7, 13 }, { 8, 14 }, { 1, 2 },
                 { 9, 15 }, { 10 }, { 5, 11 }, { 3 }, { 4 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZZClusterWithPPP() {
@@ -362,7 +457,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2, 9 }, { 3, 4, 5, 10 }, { 6, 7, 8, 11 } };
         int partitionMap[][] = new int[][] { { 0, 15, 16, 17 }, { 1, 10 }, { 11 }, { 2 }, { 12 },
                 { 4, 13 }, { 5, 14 }, { 3 }, { 6 }, { 7 }, { 8 }, { 9 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZEZClusterWithXPP() {
@@ -370,7 +468,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 6, 7, 8 }, { 3, 4, 5, 9 } };
         int partitionMap[][] = new int[][] { { 0, 17 }, { 1, 15 }, { 2, 11, 7 }, { 6 }, { 9 },
                 { 10 }, { 3, 12, 16 }, { 4, 8 }, { 5, 14 }, { 13 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZEClusterXXP() {
@@ -378,7 +479,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 3, 4, 5 }, { 6, 7, 8 } };
         int partitionMap[][] = new int[][] { { 16, 17 }, { 1, 13 }, { 8, 14 }, { 3, 15 },
                 { 4, 10 }, { 5, 11 }, { 0, 6 }, { 2, 12 }, { 7, 9 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     /**
@@ -390,7 +494,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 6 }, { 3, 4, 5 } };
         int partitionMap[][] = new int[][] { { 0, 9, 6, 17 }, { 1, 10, 15 }, { 2, 11, 7 }, {},
                 { 3, 12, 16 }, { 4, 13, 8 }, { 5, 14 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     public static Cluster getZZZClusterWithOnlyOneNodeInNewZone() {
@@ -398,7 +505,10 @@ public class ClusterTestUtils {
         int nodesPerZone[][] = new int[][] { { 0, 1, 2 }, { 6 }, { 3, 4, 5 } };
         int partitionMap[][] = new int[][] { { 0, 9, 6, 17 }, { 1, 10, 15 }, { 2, 11, 7 }, { 14 },
                 { 3, 12, 16 }, { 4, 13, 8 }, { 5 } };
-        return ServerTestUtils.getLocalZonedCluster(numberOfZones, nodesPerZone, partitionMap);
+        return ServerTestUtils.getLocalZonedCluster(numberOfZones,
+                                                    nodesPerZone,
+                                                    partitionMap,
+                                                    getClusterPorts());
     }
 
     /**
@@ -430,6 +540,7 @@ public class ClusterTestUtils {
                                         node.getHttpPort(),
                                         node.getSocketPort(),
                                         node.getAdminPort(),
+                                        node.getZoneId(),
                                         node.getPartitionIds());
                 nodeList.add(newNode);
                 nodeId++;
@@ -468,6 +579,135 @@ public class ClusterTestUtils {
         Collections.sort(nodeList);
 
         return new Cluster(cluster.getName(), nodeList, zones);
+    }
+
+    /**
+     * Given the current and target cluster metadata, along with your store
+     * definition, return the batch plan.
+     * 
+     * @param currentCluster Current cluster metadata
+     * @param targetCluster Target cluster metadata
+     * @param storeDef List of store definitions
+     * @return list of tasks for this batch plan
+     */
+    public static List<RebalancePartitionsInfo> getBatchPlan(Cluster currentCluster,
+                                                             Cluster targetCluster,
+                                                             List<StoreDefinition> storeDef) {
+        RebalanceBatchPlan rebalancePlan = new RebalanceBatchPlan(currentCluster,
+                                                                  targetCluster,
+                                                                  storeDef);
+        return rebalancePlan.getBatchPlan();
+    }
+
+    /**
+     * Given the current and target cluster metadata, along with your store
+     * definition, return the batch plan.
+     * 
+     * @param currentCluster Current cluster metadata
+     * @param targetCluster Target cluster metadata
+     * @param storeDef List of store definitions
+     * @return list of tasks for this batch plan
+     */
+    public static List<RebalancePartitionsInfo> getBatchPlan(Cluster currentCluster,
+                                                             List<StoreDefinition> currentStoreDefs,
+                                                             Cluster finalCluster,
+                                                             List<StoreDefinition> finalStoreDefs) {
+        RebalanceBatchPlan rebalancePlan = new RebalanceBatchPlan(currentCluster,
+                                                                  currentStoreDefs,
+                                                                  finalCluster,
+                                                                  finalStoreDefs);
+        return rebalancePlan.getBatchPlan();
+    }
+
+    /**
+     * Constructs a plan to rebalance from current state (cCluster/cStores) to
+     * final state (fCluster/fStores). Uses default values for the planning.
+     * 
+     * @param cCluster
+     * @param cStores
+     * @param fCluster
+     * @param fStores
+     * @return A complete RebalancePlan for the rebalance.
+     */
+    public static RebalancePlan makePlan(Cluster cCluster,
+                                         List<StoreDefinition> cStores,
+                                         Cluster fCluster,
+                                         List<StoreDefinition> fStores) {
+        // Defaults for plans
+        int batchSize = RebalancePlan.BATCH_SIZE;
+        String outputDir = null;
+
+        return new RebalancePlan(cCluster, cStores, fCluster, fStores, batchSize, outputDir);
+    }
+
+    /**
+     * Helper class to hold a rebalance controller & plan for use in other
+     * tests.
+     * 
+     */
+    public static class RebalanceKit {
+
+        public RebalanceController controller;
+        public RebalancePlan plan;
+
+        public RebalanceKit(RebalanceController controller, RebalancePlan plan) {
+            this.controller = controller;
+            this.plan = plan;
+        }
+
+        public void rebalance() {
+            this.controller.rebalance(this.plan);
+        }
+    }
+
+    public static RebalanceKit getRebalanceKit(String bootstrapUrl,
+                                               int maxParallel,
+                                               int maxTries,
+                                               boolean stealerBased,
+                                               Cluster finalCluster) {
+        RebalanceController rebalanceController = new RebalanceController(bootstrapUrl,
+                                                                          maxParallel,
+                                                                          maxTries,
+                                                                          stealerBased);
+        RebalancePlan rebalancePlan = rebalanceController.getPlan(finalCluster,
+                                                                  RebalancePlan.BATCH_SIZE);
+
+        return new RebalanceKit(rebalanceController, rebalancePlan);
+    }
+
+    public static RebalanceKit getRebalanceKit(String bootstrapUrl,
+                                               boolean stealerBased,
+                                               Cluster finalCluster) {
+        return getRebalanceKit(bootstrapUrl,
+                               RebalanceController.MAX_PARALLEL_REBALANCING,
+                               RebalanceController.MAX_TRIES_REBALANCING,
+                               stealerBased,
+                               finalCluster);
+    }
+
+    public static RebalanceKit getRebalanceKit(String bootstrapUrl,
+                                               int maxParallel,
+                                               boolean stealerBased,
+                                               Cluster finalCluster) {
+        return getRebalanceKit(bootstrapUrl,
+                               maxParallel,
+                               RebalanceController.MAX_TRIES_REBALANCING,
+                               stealerBased,
+                               finalCluster);
+    }
+
+    public static RebalanceKit getRebalanceKit(String bootstrapUrl,
+                                               boolean stealerBased,
+                                               Cluster finalCluster,
+                                               List<StoreDefinition> finalStoreDefs) {
+        RebalanceController rebalanceController = new RebalanceController(bootstrapUrl,
+                                                                          RebalanceController.MAX_PARALLEL_REBALANCING,
+                                                                          RebalanceController.MAX_TRIES_REBALANCING,
+                                                                          stealerBased);
+        RebalancePlan rebalancePlan = rebalanceController.getPlan(finalCluster,
+                                                                  finalStoreDefs,
+                                                                  RebalancePlan.BATCH_SIZE);
+        return new RebalanceKit(rebalanceController, rebalancePlan);
     }
 
 }

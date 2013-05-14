@@ -16,7 +16,6 @@
 
 package voldemort.client.rebalance;
 
-import java.io.StringReader;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -33,14 +32,14 @@ import voldemort.tools.PartitionBalance;
 import voldemort.utils.MoveMap;
 import voldemort.utils.RebalanceUtils;
 import voldemort.utils.Utils;
-import voldemort.xml.ClusterMapper;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.TreeMultimap;
 
-// TODO: Add a header comment.
-// TODO: Remove stealerBased from the constructor once RebalanceController is
-// switched over to use RebalancePlan. (Or sooner)
+/**
+ * RebalancePlan encapsulates all aspects of planning a shuffle, cluster
+ * expansion, or zone expansion.
+ */
 public class RebalancePlan {
 
     private static final Logger logger = Logger.getLogger(RebalancePlan.class);
@@ -54,14 +53,12 @@ public class RebalancePlan {
     public final static int BATCH_SIZE = Integer.MAX_VALUE;
 
     private final Cluster currentCluster;
-    private final List<StoreDefinition> currentStores;
+    private final List<StoreDefinition> currentStoreDefs;
     private final Cluster finalCluster;
-    private final List<StoreDefinition> finalStores;
+    private final List<StoreDefinition> finalStoreDefs;
     private final int batchSize;
     private final String outputDir;
 
-    // TODO: (refactor) Better name than targetCluster? -> interimCluster
-    private final Cluster targetCluster;
     private List<RebalanceBatchPlan> batchPlans;
 
     // Aggregate stats
@@ -71,38 +68,56 @@ public class RebalancePlan {
     private final MoveMap nodeMoveMap;
     private final MoveMap zoneMoveMap;
 
+    /**
+     * Constructs a plan for the specified change from currentCluster/StoreDefs
+     * to finalCluster/StoreDefs.
+     * 
+     * finalStoreDefs are needed for the zone expansion use case since store
+     * definitions depend on the number of zones.
+     * 
+     * In theory, since current & final StoreDefs are passed in, this plan could
+     * be used to transform deployed store definitions. In practice, this use
+     * case has not been tested.
+     * 
+     * @param currentCluster current deployed cluster
+     * @param currentStoreDefs current deployed store defs
+     * @param finalCluster desired deployed cluster
+     * @param finalStoreDefs desired deployed store defs
+     * @param batchSize number of primary partitions to move in each batch.
+     * @param outputDir directory in which to dump metadata files for the plan
+     */
     public RebalancePlan(final Cluster currentCluster,
-                         final List<StoreDefinition> currentStores,
+                         final List<StoreDefinition> currentStoreDefs,
                          final Cluster finalCluster,
-                         final List<StoreDefinition> finalStores,
+                         final List<StoreDefinition> finalStoreDefs,
                          int batchSize,
                          String outputDir) {
         this.currentCluster = currentCluster;
-        this.currentStores = RebalanceUtils.validateRebalanceStore(currentStores);
+        this.currentStoreDefs = RebalanceUtils.validateRebalanceStore(currentStoreDefs);
         this.finalCluster = finalCluster;
-        this.finalStores = RebalanceUtils.validateRebalanceStore(finalStores);
+        this.finalStoreDefs = RebalanceUtils.validateRebalanceStore(finalStoreDefs);
         this.batchSize = batchSize;
         this.outputDir = outputDir;
 
+        // TODO: (currentCluster vs interimCluster) Instead of divining
+        // interimCluster from currentCluster and finalCluster, should we
+        // require that interimCluster be passed in?
+
         // Derive the targetCluster from current & final cluster xml
         RebalanceUtils.validateCurrentFinalCluster(this.currentCluster, this.finalCluster);
-        this.targetCluster = RebalanceUtils.getTargetCluster(this.currentCluster, this.finalCluster);
+        Cluster interimCluster = RebalanceUtils.getInterimCluster(this.currentCluster,
+                                                                  this.finalCluster);
 
         // Verify each cluster/storedefs pair
-        RebalanceUtils.validateClusterStores(this.currentCluster, this.currentStores);
-        RebalanceUtils.validateClusterStores(this.finalCluster, this.finalStores);
-        RebalanceUtils.validateClusterStores(this.targetCluster, this.finalStores);
+        RebalanceUtils.validateClusterStores(this.currentCluster, this.currentStoreDefs);
+        RebalanceUtils.validateClusterStores(this.finalCluster, this.finalStoreDefs);
+        RebalanceUtils.validateClusterStores(interimCluster, this.finalStoreDefs);
 
         // Log key arguments
         logger.info("Current cluster : " + currentCluster);
-        logger.info("Target cluster : " + targetCluster);
+        logger.info("Interim cluster : " + interimCluster);
         logger.info("Final cluster : " + finalCluster);
         logger.info("Batch size : " + batchSize);
-
-        logger.info(RebalanceUtils.analyzeInvalidMetadataRate(currentCluster,
-                                                              currentStores,
-                                                              finalCluster,
-                                                              finalStores));
 
         // Initialize the plan
         batchPlans = new ArrayList<RebalanceBatchPlan>();
@@ -111,8 +126,8 @@ public class RebalancePlan {
         numPrimaryPartitionMoves = 0;
         numPartitionStoreMoves = 0;
         numXZonePartitionStoreMoves = 0;
-        nodeMoveMap = new MoveMap(targetCluster.getNodeIds());
-        zoneMoveMap = new MoveMap(targetCluster.getZoneIds());
+        nodeMoveMap = new MoveMap(interimCluster.getNodeIds());
+        zoneMoveMap = new MoveMap(interimCluster.getZoneIds());
 
         plan();
     }
@@ -127,7 +142,7 @@ public class RebalancePlan {
 
     /**
      * Create a plan. The plan consists of batches. Each batch involves the
-     * movement of nor more than batchSize primary partitions. The movement of a
+     * movement of no more than batchSize primary partitions. The movement of a
      * single primary partition may require migration of other n-ary replicas,
      * and potentially deletions. Migrating a primary or n-ary partition
      * requires migrating one partition-store for every store hosted at that
@@ -138,16 +153,13 @@ public class RebalancePlan {
         // Mapping of stealer node to list of primary partitions being moved
         final TreeMultimap<Integer, Integer> stealerToStolenPrimaryPartitions = TreeMultimap.create();
 
-        // Used for creating clones
-        ClusterMapper mapper = new ClusterMapper();
-
         // Output initial and final cluster
         if(outputDir != null)
-            RebalanceUtils.dumpClusters(targetCluster, finalCluster, outputDir);
+            RebalanceUtils.dumpClusters(currentCluster, finalCluster, outputDir);
 
         // Determine which partitions must be stolen
         for(Node stealerNode: finalCluster.getNodes()) {
-            List<Integer> stolenPrimaryPartitions = RebalanceUtils.getStolenPrimaryPartitions(targetCluster,
+            List<Integer> stolenPrimaryPartitions = RebalanceUtils.getStolenPrimaryPartitions(currentCluster,
                                                                                               finalCluster,
                                                                                               stealerNode.getId());
             if(stolenPrimaryPartitions.size() > 0) {
@@ -159,11 +171,14 @@ public class RebalancePlan {
 
         // Determine plan batch-by-batch
         int batches = 0;
-        Cluster batchTargetCluster = mapper.readCluster(new StringReader(mapper.writeCluster(targetCluster)));
+        Cluster batchCurrentCluster = Cluster.cloneCluster(currentCluster);
+        List<StoreDefinition> batchCurrentStoreDefs = this.currentStoreDefs;
+        List<StoreDefinition> batchFinalStoreDefs = this.finalStoreDefs;
+        Cluster batchFinalCluster = RebalanceUtils.getInterimCluster(this.currentCluster,
+                                                                     this.finalCluster);
+
         while(!stealerToStolenPrimaryPartitions.isEmpty()) {
 
-            // Generate a batch partitions to move
-            Cluster batchFinalCluster = mapper.readCluster(new StringReader(mapper.writeCluster(batchTargetCluster)));
             int partitions = 0;
             List<Entry<Integer, Integer>> partitionsMoved = Lists.newArrayList();
             for(Entry<Integer, Integer> stealerToPartition: stealerToStolenPrimaryPartitions.entries()) {
@@ -182,18 +197,17 @@ public class RebalancePlan {
                 stealerToStolenPrimaryPartitions.remove(entry.getKey(), entry.getValue());
             }
 
-            // TODO: Change naming convention in dumpCluster to be current- &
-            // final- or target- & final-
             if(outputDir != null)
-                RebalanceUtils.dumpClusters(batchTargetCluster,
+                RebalanceUtils.dumpClusters(batchCurrentCluster,
                                             batchFinalCluster,
                                             outputDir,
                                             "batch-" + Integer.toString(batches) + ".");
 
             // Generate a plan to compute the tasks
-            final RebalanceBatchPlan RebalanceBatchPlan = new RebalanceBatchPlan(batchTargetCluster,
+            final RebalanceBatchPlan RebalanceBatchPlan = new RebalanceBatchPlan(batchCurrentCluster,
+                                                                                 batchCurrentStoreDefs,
                                                                                  batchFinalCluster,
-                                                                                 finalStores);
+                                                                                 batchFinalStoreDefs);
             batchPlans.add(RebalanceBatchPlan);
 
             numXZonePartitionStoreMoves += RebalanceBatchPlan.getCrossZonePartitionStoreMoves();
@@ -202,7 +216,10 @@ public class RebalancePlan {
             zoneMoveMap.add(RebalanceBatchPlan.getZoneMoveMap());
 
             batches++;
-            batchTargetCluster = mapper.readCluster(new StringReader(mapper.writeCluster(batchFinalCluster)));
+            batchCurrentCluster = Cluster.cloneCluster(batchFinalCluster);
+            // batchCurrentStoreDefs can only be different from
+            // batchFinalStoreDefs for the initial batch.
+            batchCurrentStoreDefs = batchFinalStoreDefs;
         }
 
         logger.info(this);
@@ -217,7 +234,7 @@ public class RebalancePlan {
      */
     private String storageOverhead(Map<Integer, Integer> finalNodeToOverhead) {
         double maxOverhead = Double.MIN_VALUE;
-        PartitionBalance pb = new PartitionBalance(currentCluster, currentStores);
+        PartitionBalance pb = new PartitionBalance(currentCluster, currentStoreDefs);
         StringBuilder sb = new StringBuilder();
         sb.append("Per-node store-overhead:").append(Utils.NEWLINE);
         DecimalFormat doubleDf = new DecimalFormat("####.##");
@@ -254,7 +271,7 @@ public class RebalancePlan {
     }
 
     public List<StoreDefinition> getCurrentStores() {
-        return currentStores;
+        return currentStoreDefs;
     }
 
     public Cluster getFinalCluster() {
@@ -262,7 +279,7 @@ public class RebalancePlan {
     }
 
     public List<StoreDefinition> getFinalStores() {
-        return finalStores;
+        return finalStoreDefs;
     }
 
     /**
@@ -271,6 +288,19 @@ public class RebalancePlan {
      */
     public List<RebalanceBatchPlan> getPlan() {
         return batchPlans;
+    }
+
+    /**
+     * Total number of rebalancing tasks in the plan.
+     * 
+     * @return number of rebalancing tasks in the plan.
+     */
+    public int taskCount() {
+        int numTasks = 0;
+        for(RebalanceBatchPlan batchPlan: batchPlans) {
+            numTasks += batchPlan.getBatchPlan().size();
+        }
+        return numTasks;
     }
 
     public int getPrimariesMoved() {
@@ -296,12 +326,19 @@ public class RebalancePlan {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        // Dump entire plan batch-by-batch, partition info-by-partition info...
+        // Add entire plan batch-by-batch, partition info-by-partition info...
         for(RebalanceBatchPlan batchPlan: batchPlans) {
             sb.append(batchPlan).append(Utils.NEWLINE);
         }
-        // Dump aggregate stats of the plan
+        // Add invalid metadata rate analysis
+        sb.append(RebalanceUtils.analyzeInvalidMetadataRate(currentCluster,
+                                                            currentStoreDefs,
+                                                            finalCluster,
+                                                            finalStoreDefs));
+        // Summarize aggregate plan stats
         sb.append("Total number of primary partition moves : " + numPrimaryPartitionMoves)
+          .append(Utils.NEWLINE)
+          .append("Total number of rebalance tasks : " + taskCount())
           .append(Utils.NEWLINE)
           .append("Total number of partition-store moves : " + numPartitionStoreMoves)
           .append(Utils.NEWLINE)
