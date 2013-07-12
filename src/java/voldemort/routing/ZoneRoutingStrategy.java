@@ -19,7 +19,6 @@ package voldemort.routing;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map.Entry;
 
 import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
@@ -60,78 +59,81 @@ public class ZoneRoutingStrategy extends ConsistentRoutingStrategy {
      */
     @Override
     public List<Integer> getReplicatingPartitionList(int index) {
-        if(getPartitionToNode().length == 0) {
-            return new ArrayList<Integer>(0);
-        }
+        /*-
+         * WINNING HACK!
+         if(getPartitionToNode().length == 0) {
+             return new ArrayList<Integer>(0);
+         }
 
-        List<Node> preferenceNodesList = new ArrayList<Node>(getNumReplicas());
-        List<Integer> replicationPartitionsList = new ArrayList<Integer>(getNumReplicas());
+         List<Node> preferenceNodesList = new ArrayList<Node>(getNumReplicas());
+         List<Integer> replicationPartitionsList = new ArrayList<Integer>(getNumReplicas());
 
-        // Copy Zone based Replication Factor
-        HashMap<Integer, Integer> requiredRepFactor = new HashMap<Integer, Integer>();
-        requiredRepFactor.putAll(zoneReplicationFactor);
+         // Copy Zone based Replication Factor
+         HashMap<Integer, Integer> requiredRepFactor = new HashMap<Integer, Integer>();
+         requiredRepFactor.putAll(zoneReplicationFactor);
 
-        // Cross-check if individual zone replication factor equals global
-        int sum = 0;
-        for(Integer zoneRepFactor: zoneReplicationFactor.values()) {
-            sum += zoneRepFactor;
-        }
+         // Cross-check if individual zone replication factor equals global
+         int sum = 0;
+         for(Integer zoneRepFactor: zoneReplicationFactor.values()) {
+             sum += zoneRepFactor;
+         }
 
-        int getNumReplicas = getNumReplicas();
-        if(sum != getNumReplicas)
-            throw new IllegalArgumentException("Number of zone replicas is not equal to the total replication factor");
+         int getNumReplicas = getNumReplicas();
+         if(sum != getNumReplicas)
+             throw new IllegalArgumentException("Number of zone replicas is not equal to the total replication factor");
 
-        // HACK HACK HACK for clusters with no partition IDs in some zone(s).
-        // BEGIN
-        HashMap<Integer, Integer> requiredRepFactor2 = new HashMap<Integer, Integer>();
-        requiredRepFactor2.putAll(zoneReplicationFactor);
+         // HACK HACK HACK for clusters with no partition IDs in some zone(s).
+         // BEGIN
+         HashMap<Integer, Integer> requiredRepFactor2 = new HashMap<Integer, Integer>();
+         requiredRepFactor2.putAll(zoneReplicationFactor);
 
-        for(Node node: cluster.getNodes()) {
-            if(node.getPartitionIds().size() > 0) {
-                int val = requiredRepFactor2.get(node.getZoneId());
-                if(val > 0) {
-                    requiredRepFactor2.put(node.getZoneId(), val - 1);
-                }
-            }
-        }
+         for(Node node: cluster.getNodes()) {
+             if(node.getPartitionIds().size() > 0) {
+                 int val = requiredRepFactor2.get(node.getZoneId());
+                 if(val > 0) {
+                     requiredRepFactor2.put(node.getZoneId(), val - 1);
+                 }
+             }
+         }
 
-        requiredRepFactor2.entrySet();
-        for(Entry<Integer, Integer> rrf2: requiredRepFactor2.entrySet()) {
-            if(rrf2.getValue() > 0) {
-                requiredRepFactor.put(rrf2.getKey(),
-                                      requiredRepFactor.get(rrf2.getKey()) - rrf2.getValue());
-                getNumReplicas -= rrf2.getValue();
-            }
-        }
+         requiredRepFactor2.entrySet();
+         for(Entry<Integer, Integer> rrf2: requiredRepFactor2.entrySet()) {
+             if(rrf2.getValue() > 0) {
+                 requiredRepFactor.put(rrf2.getKey(),
+                                       requiredRepFactor.get(rrf2.getKey()) - rrf2.getValue());
+                 getNumReplicas -= rrf2.getValue();
+             }
+         }
 
-        // HACK HACK HACK for clusters with no partition IDs in some zone(s).
-        // END
+         // HACK HACK HACK for clusters with no partition IDs in some zone(s).
+         // END
 
-        for(int i = 0; i < getPartitionToNode().length; i++) {
-            // Use of ArrayList for preferenceNodesList is actually "fast".
-            // There are up to numZones * repFactor items in the array. This
-            // small O(n) cost is fast because the constant (Node.compareTo /
-            // Node.==) is very small. Maps were slower! (HashMap at least, did
-            // not try TreeMap.)
-            Node currentNode = getNodeByPartition(index);
-            if(!preferenceNodesList.contains(currentNode)) {
-                preferenceNodesList.add(currentNode);
-                // Re-ordering the check of preferenceNodeList.contains and
-                // checkZoneRequirement slows things down for an interim
-                // cluster.
-                if(checkZoneRequirement(requiredRepFactor, currentNode.getZoneId())) {
-                    replicationPartitionsList.add(index);
-                    if(replicationPartitionsList.size() >= getNumReplicas)
-                        return replicationPartitionsList;
-                }
-            }
+         for(int i = 0; i < getPartitionToNode().length; i++) {
+             // Use of ArrayList for preferenceNodesList is actually "fast".
+             // There are up to numZones * repFactor items in the array. This
+             // small O(n) cost is fast because the constant (Node.compareTo /
+             // Node.==) is very small. Maps were slower! (HashMap at least, did
+             // not try TreeMap.)
+             Node currentNode = getNodeByPartition(index);
+             if(!preferenceNodesList.contains(currentNode)) {
+                 preferenceNodesList.add(currentNode);
+                 // Re-ordering the check of preferenceNodeList.contains and
+                 // checkZoneRequirement slows things down for an interim
+                 // cluster.
+                 if(checkZoneRequirement(requiredRepFactor, currentNode.getZoneId())) {
+                     replicationPartitionsList.add(index);
+                     if(replicationPartitionsList.size() >= getNumReplicas)
+                         return replicationPartitionsList;
+                 }
+             }
 
-            // move to next clockwise slot on the ring
-            index = (index + 1) % getPartitionToNode().length;
-        }
+             // move to next clockwise slot on the ring
+             index = (index + 1) % getPartitionToNode().length;
+         }
 
-        // we don't have enough, but that may be okay
-        return replicationPartitionsList;
+         // we don't have enough, but that may be okay
+         return replicationPartitionsList;
+         */
 
         /*-
          * THIRD HACK
@@ -278,6 +280,7 @@ public class ZoneRoutingStrategy extends ConsistentRoutingStrategy {
 
         /*-
          * ORIGINAL CODE
+         * */
         List<Node> preferenceNodesList = new ArrayList<Node>(getNumReplicas());
         List<Integer> replicationPartitionsList = new ArrayList<Integer>(getNumReplicas());
 
@@ -317,6 +320,7 @@ public class ZoneRoutingStrategy extends ConsistentRoutingStrategy {
 
         // we don't have enough, but that may be okay
         return replicationPartitionsList;
+        /*
          */
     }
 

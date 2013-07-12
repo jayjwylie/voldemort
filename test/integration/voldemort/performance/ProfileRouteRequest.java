@@ -71,7 +71,10 @@ public class ProfileRouteRequest {
 
         ClusterMapper cmapper = new ClusterMapper();
         StoreDefinitionsMapper smapper = new StoreDefinitionsMapper();
-        String JayPath = "/home/jwylie/projects/li/svn/voldemort_clusters/prod/cnc-02/";
+        String clusterName = "cnc-02/";
+        // String clusterName = "news/";
+        // String clusterName = "money-01/";
+        String JayPath = "/home/jwylie/projects/li/svn/voldemort_clusters/prod/" + clusterName;
         String VinothPath = "/home/vchandar/cache/zone-expansion-test/cnc02-hit/";
 
         Cluster baseCluster = cmapper.readCluster(new File(JayPath + "cluster.xml"));
