@@ -71,7 +71,7 @@ import voldemort.store.socket.SocketStoreFactory;
 import voldemort.store.socket.clientrequest.ClientRequestExecutorPool;
 import voldemort.utils.ByteArray;
 import voldemort.utils.DaemonThreadFactory;
-import voldemort.utils.RebalanceUtils;
+import voldemort.utils.UpdateClusterUtils;
 import voldemort.versioning.ClockEntry;
 import voldemort.versioning.ObsoleteVersionException;
 import voldemort.versioning.VectorClock;
@@ -112,7 +112,7 @@ public class RedirectingStoreTest {
     @Before
     public void setUp() throws IOException, InterruptedException {
         currentCluster = ServerTestUtils.getLocalCluster(3, new int[][] { { 0, 1 }, { 2, 3 }, {} });
-        targetCluster = RebalanceUtils.createUpdatedCluster(currentCluster, 2, Arrays.asList(0));
+        targetCluster = UpdateClusterUtils.createUpdatedCluster(currentCluster, 2, Arrays.asList(0));
         this.primaryPartitionsMoved = Lists.newArrayList(0);
         this.secondaryPartitionsMoved = Lists.newArrayList(2, 3);
         this.storeDef = new StoreDefinitionBuilder().setName("test")

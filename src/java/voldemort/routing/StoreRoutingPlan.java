@@ -27,7 +27,6 @@ import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
 import voldemort.store.StoreDefinition;
 import voldemort.store.system.SystemStoreConstants;
-import voldemort.utils.ClusterUtils;
 import voldemort.utils.Pair;
 import voldemort.utils.Utils;
 
@@ -49,7 +48,7 @@ public class StoreRoutingPlan extends BaseStoreRoutingPlan {
         super(cluster, storeDefinition);
         verifyClusterStoreDefinition();
 
-        this.partitionIdToNodeIdMap = ClusterUtils.getCurrentPartitionMapping(cluster);
+        this.partitionIdToNodeIdMap = cluster.getPartitionIdToNodeIdMap();
 
         this.nodeIdToNaryPartitionMap = new HashMap<Integer, List<Integer>>();
         this.nodeIdToZonePrimaryMap = new HashMap<Integer, List<Integer>>();

@@ -44,7 +44,7 @@ public class ClusterUtilsTest {
         // -------oo-------oo--oo-------------- !Wraps around!
 
         // => {14,7}, {6,3}, {12,1}
-        iiMap = ClusterUtils.getMapOfContiguousPartitions(cluster, 0);
+        iiMap = PartitionBalanceUtils.getMapOfContiguousPartitions(cluster, 0);
         assertTrue(iiMap.containsKey(6));
         assertTrue(iiMap.get(6) == 3);
         assertTrue(iiMap.containsKey(12));
@@ -53,7 +53,7 @@ public class ClusterUtilsTest {
         assertTrue(iiMap.get(14) == 7);
 
         // => {3,1}, {1,1}, {7,1}
-        iiMap = ClusterUtils.getMapOfContiguousPartitionRunLengths(cluster, 0);
+        iiMap = PartitionBalanceUtils.getMapOfContiguousPartitionRunLengths(cluster, 0);
         assertTrue(iiMap.containsKey(1));
         assertTrue(iiMap.get(1) == 1);
         assertTrue(iiMap.containsKey(3));
@@ -66,7 +66,7 @@ public class ClusterUtilsTest {
         // -------oo---------oo--
 
         // => {3,3}, {9,3}, {13,1}
-        iiMap = ClusterUtils.getMapOfContiguousPartitions(cluster, 1);
+        iiMap = PartitionBalanceUtils.getMapOfContiguousPartitions(cluster, 1);
         assertTrue(iiMap.containsKey(3));
         assertTrue(iiMap.get(3) == 3);
         assertTrue(iiMap.containsKey(9));
@@ -75,7 +75,7 @@ public class ClusterUtilsTest {
         assertTrue(iiMap.get(13) == 1);
 
         // => {1,1}, {3,2}
-        iiMap = ClusterUtils.getMapOfContiguousPartitionRunLengths(cluster, 1);
+        iiMap = PartitionBalanceUtils.getMapOfContiguousPartitionRunLengths(cluster, 1);
         assertTrue(iiMap.containsKey(1));
         assertTrue(iiMap.get(1) == 1);
         assertTrue(iiMap.containsKey(3));

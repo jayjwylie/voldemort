@@ -17,112 +17,31 @@
 package voldemort.utils;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.apache.log4j.Logger;
+import com.google.common.collect.Maps;
 
-import voldemort.VoldemortException;
 import voldemort.cluster.Cluster;
 import voldemort.cluster.Node;
 import voldemort.cluster.Zone;
+import voldemort.routing.StoreRoutingPlan;
+import voldemort.store.StoreDefinition;
+import voldemort.store.StoreUtils;
 
-import com.google.common.collect.Maps;
 
-// TODO: (refactor) Move all of the static "util" methods for which Cluster is
-// the only complex type that the method operates on to be members of the
-// Cluster class. Unclear whether 'nodeid' and 'partitionid' should be treated
-// as complex types since they are proxies for complicated concepts.
 /**
- * ClusterUtils provides basic tools for manipulating and inspecting a cluster.
+ * PartitionBalanceUtils provides helper methods for interpreting, analyzing,
+ * and printing partition information.
  * 
- * Methods in this util module should take exactly one Cluster object, and
- * possibly some other minor, simple arguments. A method that takes other
- * complicated types such as StoreDefs or RebalancePlans should not be included
- * in this module.
+ * Most of these helper methods take one Cluster object, and possibly some other
+ * minor, simple arguments. The Cluster object defines the partitoin layout
+ * which is being interpreted/analzyed/printed.
  */
-public class ClusterUtils {
-
-    private static Logger logger = Logger.getLogger(ClusterUtils.class);
-
-    /**
-     * Creates a new cluster object that is a copy of currentCluster.
-     * 
-     * @param currentCluster The current cluster metadata
-     * @return New cluster metadata which is copy of currentCluster
-     */
-    public static Cluster copyCluster(Cluster currentCluster) {
-        return new Cluster(currentCluster.getName(),
-                           new ArrayList<Node>(currentCluster.getNodes()),
-                           new ArrayList<Zone>(currentCluster.getZones()));
-    }
-
-    /**
-     * Given a cluster and a node id checks if the node exists
-     * 
-     * @param cluster The cluster metadata to check in
-     * @param nodeId The node id to search for
-     * @return True if cluster contains the node id, else false
-     */
-    public static boolean containsNode(Cluster cluster, int nodeId) {
-        try {
-            cluster.getNodeById(nodeId);
-            return true;
-        } catch(VoldemortException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Given a preference list and a node id, check if any one of the partitions
-     * is on the node in picture
-     * 
-     * @param cluster Cluster metadata
-     * @param preferenceList Preference list of partition ids
-     * @param nodeId Node id which we are checking for
-     * @return True if the preference list contains a node whose id = nodeId
-     */
-    public static boolean containsPreferenceList(Cluster cluster,
-                                                 List<Integer> preferenceList,
-                                                 int nodeId) {
-
-        for(int partition: preferenceList) {
-            if(cluster.getNodeForPartitionId(partition).getId() == nodeId) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Given the cluster metadata returns a mapping of partition to node
-     * 
-     * @param currentCluster Cluster metadata
-     * @return Map of partition id to node id
-     */
-    public static Map<Integer, Integer> getCurrentPartitionMapping(Cluster currentCluster) {
-
-        Map<Integer, Integer> partitionToNode = new LinkedHashMap<Integer, Integer>();
-
-        for(Node node: currentCluster.getNodes()) {
-            for(Integer partition: node.getPartitionIds()) {
-                // Check if partition is on another node
-                Integer previousRegisteredNodeId = partitionToNode.get(partition);
-                if(previousRegisteredNodeId != null) {
-                    throw new IllegalArgumentException("Partition id " + partition
-                                                       + " found on two nodes : " + node.getId()
-                                                       + " and " + previousRegisteredNodeId);
-                }
-
-                partitionToNode.put(partition, node.getId());
-            }
-        }
-
-        return partitionToNode;
-    }
+public class PartitionBalanceUtils {
 
     /**
      * Compress contiguous partitions into format "e-i" instead of
@@ -134,9 +53,9 @@ public class ClusterUtils {
      * @return
      */
     public static String compressedListOfPartitionsInZone(final Cluster cluster, int zoneId) {
-        Map<Integer, Integer> idToRunLength = ClusterUtils.getMapOfContiguousPartitions(cluster,
+        Map<Integer, Integer> idToRunLength = PartitionBalanceUtils.getMapOfContiguousPartitions(cluster,
                                                                                         zoneId);
-
+    
         StringBuilder sb = new StringBuilder();
         sb.append("[");
         boolean first = true;
@@ -147,7 +66,7 @@ public class ClusterUtils {
             } else {
                 first = false;
             }
-
+    
             int runLength = idToRunLength.get(initPartitionId);
             if(runLength == 1) {
                 sb.append(initPartitionId);
@@ -158,7 +77,7 @@ public class ClusterUtils {
             }
         }
         sb.append("]");
-
+    
         return sb.toString();
     }
 
@@ -175,14 +94,14 @@ public class ClusterUtils {
                                                                      int zoneId) {
         List<Integer> partitionIds = new ArrayList<Integer>(cluster.getPartitionIdsInZone(zoneId));
         Map<Integer, Integer> partitionIdToRunLength = Maps.newHashMap();
-
+    
         if(partitionIds.isEmpty()) {
             return partitionIdToRunLength;
         }
-
+    
         int lastPartitionId = partitionIds.get(0);
         int initPartitionId = lastPartitionId;
-
+    
         for(int offset = 1; offset < partitionIds.size(); offset++) {
             int partitionId = partitionIds.get(offset);
             if(partitionId == lastPartitionId + 1) {
@@ -190,13 +109,13 @@ public class ClusterUtils {
                 continue;
             }
             int runLength = lastPartitionId - initPartitionId + 1;
-
+    
             partitionIdToRunLength.put(initPartitionId, runLength);
-
+    
             initPartitionId = partitionId;
             lastPartitionId = initPartitionId;
         }
-
+    
         int runLength = lastPartitionId - initPartitionId + 1;
         if(lastPartitionId == cluster.getNumberOfPartitions() - 1
            && partitionIdToRunLength.containsKey(0)) {
@@ -206,7 +125,7 @@ public class ClusterUtils {
         } else {
             partitionIdToRunLength.put(initPartitionId, runLength);
         }
-
+    
         return partitionIdToRunLength;
     }
 
@@ -223,23 +142,23 @@ public class ClusterUtils {
      * @return map of length of contiguous run of partitions to count of number
      *         of such runs.
      */
-    public static Map<Integer, Integer> getMapOfContiguousPartitionRunLengths(final Cluster cluster,
-                                                                              int zoneId) {
-        Map<Integer, Integer> idToRunLength = ClusterUtils.getMapOfContiguousPartitions(cluster,
+    public static Map<Integer, Integer>
+            getMapOfContiguousPartitionRunLengths(final Cluster cluster, int zoneId) {
+        Map<Integer, Integer> idToRunLength = getMapOfContiguousPartitions(cluster,
                                                                                         zoneId);
         Map<Integer, Integer> runLengthToCount = Maps.newHashMap();
-
+    
         if(idToRunLength.isEmpty()) {
             return runLengthToCount;
         }
-
+    
         for(int runLength: idToRunLength.values()) {
             if(!runLengthToCount.containsKey(runLength)) {
                 runLengthToCount.put(runLength, 0);
             }
             runLengthToCount.put(runLength, runLengthToCount.get(runLength) + 1);
         }
-
+    
         return runLengthToCount;
     }
 
@@ -282,15 +201,15 @@ public class ClusterUtils {
     public static String getHotPartitionsDueToContiguity(final Cluster cluster,
                                                          int hotContiguityCutoff) {
         StringBuilder sb = new StringBuilder();
-
+    
         for(int zoneId: cluster.getZoneIds()) {
-            Map<Integer, Integer> idToRunLength = ClusterUtils.getMapOfContiguousPartitions(cluster,
+            Map<Integer, Integer> idToRunLength = getMapOfContiguousPartitions(cluster,
                                                                                             zoneId);
             for(Integer initialPartitionId: idToRunLength.keySet()) {
                 int runLength = idToRunLength.get(initialPartitionId);
                 if(runLength < hotContiguityCutoff)
                     continue;
-
+    
                 int hotPartitionId = (initialPartitionId + runLength)
                                      % cluster.getNumberOfPartitions();
                 Node hotNode = cluster.getNodeForPartitionId(hotPartitionId);
@@ -299,7 +218,7 @@ public class ClusterUtils {
                           + " that follows contiguous run of length " + runLength + Utils.NEWLINE);
             }
         }
-
+    
         return sb.toString();
     }
 
@@ -313,7 +232,7 @@ public class ClusterUtils {
      */
     public static String verboseClusterDump(final Cluster cluster) {
         StringBuilder builder = new StringBuilder();
-
+    
         builder.append("CLUSTER XML SUMMARY\n");
         Map<Integer, Integer> zoneIdToPartitionCount = Maps.newHashMap();
         Map<Integer, Integer> zoneIdToNodeCount = Maps.newHashMap();
@@ -328,65 +247,134 @@ public class ClusterUtils {
             zoneIdToNodeCount.put(node.getZoneId(), zoneIdToNodeCount.get(node.getZoneId()) + 1);
         }
         builder.append("\n");
-
+    
         builder.append("Number of partitions per zone:\n");
         for(Zone zone: cluster.getZones()) {
             builder.append("\tZone: " + zone.getId() + " - "
                            + zoneIdToPartitionCount.get(zone.getId()) + "\n");
         }
         builder.append("\n");
-
+    
         builder.append("Number of nodes per zone:\n");
         for(Zone zone: cluster.getZones()) {
             builder.append("\tZone: " + zone.getId() + " - " + zoneIdToNodeCount.get(zone.getId())
                            + "\n");
         }
         builder.append("\n");
-
+    
         builder.append("Nodes in each zone:\n");
         for(Zone zone: cluster.getZones()) {
             builder.append("\tZone: " + zone.getId() + " - "
                            + cluster.getNodeIdsInZone(zone.getId()) + "\n");
         }
         builder.append("\n");
-
+    
         builder.append("Number of partitions per node:\n");
         for(Node node: cluster.getNodes()) {
             builder.append("\tNode ID: " + node.getId() + " - " + node.getNumberOfPartitions()
                            + " (" + node.getHost() + ")\n");
         }
         builder.append("\n");
-
+    
         if(cluster.getZones().size() > 1) {
             builder.append("ZONE-PARTITION SUMMARY:\n");
             builder.append("\n");
-
+    
             builder.append("Partitions in each zone:\n");
             for(Zone zone: cluster.getZones()) {
                 builder.append("\tZone: "
                                + zone.getId()
                                + " - "
-                               + ClusterUtils.compressedListOfPartitionsInZone(cluster,
+                               + compressedListOfPartitionsInZone(cluster,
                                                                                zone.getId()) + "\n");
             }
             builder.append("\n");
-
+    
             builder.append("Contiguous partition run lengths in each zone ('{run length : count}'):\n");
             for(Zone zone: cluster.getZones()) {
                 builder.append("\tZone: "
                                + zone.getId()
                                + " - "
-                               + ClusterUtils.getPrettyMapOfContiguousPartitionRunLengths(cluster,
+                               + getPrettyMapOfContiguousPartitionRunLengths(cluster,
                                                                                           zone.getId())
                                + "\n");
             }
             builder.append("\n");
-
+    
             builder.append("The following nodes have hot partitions:\n");
-            builder.append(ClusterUtils.getHotPartitionsDueToContiguity(cluster, 5));
+            builder.append(getHotPartitionsDueToContiguity(cluster, 5));
             builder.append("\n");
         }
-
+    
         return builder.toString();
     }
+
+    // TODO: (refactor) separate analysis from pretty printing and add a unit
+    // test for the analysis sub-method.
+    /**
+     * Compares current cluster with final cluster. Uses pertinent store defs
+     * for each cluster to determine if a node that hosts a zone-primary in the
+     * current cluster will no longer host any zone-nary in the final cluster.
+     * This check is the precondition for a server returning an invalid metadata
+     * exception to a client on a normal-case put or get. Normal-case being that
+     * the zone-primary receives the pseudo-master put or the get operation.
+     * 
+     * @param currentCluster
+     * @param currentStoreDefs
+     * @param finalCluster
+     * @param finalStoreDefs
+     * @return pretty-printed string documenting invalid metadata rates for each
+     *         zone.
+     */
+    public static String analyzeInvalidMetadataRate(final Cluster currentCluster,
+                                                    List<StoreDefinition> currentStoreDefs,
+                                                    final Cluster finalCluster,
+                                                    List<StoreDefinition> finalStoreDefs) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Dump of invalid metadata rates per zone").append(Utils.NEWLINE);
+    
+        HashMap<StoreDefinition, Integer> uniqueStores = StoreDefinitionUtils.getUniqueStoreDefinitionsWithCounts(currentStoreDefs);
+    
+        for(StoreDefinition currentStoreDef: uniqueStores.keySet()) {
+            sb.append("Store exemplar: " + currentStoreDef.getName())
+              .append(Utils.NEWLINE)
+              .append("\tThere are " + uniqueStores.get(currentStoreDef) + " other similar stores.")
+              .append(Utils.NEWLINE);
+    
+            StoreRoutingPlan currentSRP = new StoreRoutingPlan(currentCluster, currentStoreDef);
+            StoreDefinition finalStoreDef = StoreUtils.getStoreDef(finalStoreDefs,
+                                                                   currentStoreDef.getName());
+            StoreRoutingPlan finalSRP = new StoreRoutingPlan(finalCluster, finalStoreDef);
+    
+            // Only care about existing zones
+            for(int zoneId: currentCluster.getZoneIds()) {
+                int zonePrimariesCount = 0;
+                int invalidMetadata = 0;
+    
+                // Examine nodes in current cluster in existing zone.
+                for(int nodeId: currentCluster.getNodeIdsInZone(zoneId)) {
+                    // For every zone-primary in current cluster
+                    for(int zonePrimaryPartitionId: currentSRP.getZonePrimaryPartitionIds(nodeId)) {
+                        zonePrimariesCount++;
+                        // Determine if original zone-primary node is still some
+                        // form of n-ary in final cluster. If not,
+                        // InvalidMetadataException will fire.
+                        if(!finalSRP.getZoneNAryPartitionIds(nodeId)
+                                    .contains(zonePrimaryPartitionId)) {
+                            invalidMetadata++;
+                        }
+                    }
+                }
+                float rate = invalidMetadata / (float) zonePrimariesCount;
+                sb.append("\tZone " + zoneId)
+                  .append(" : total zone primaries " + zonePrimariesCount)
+                  .append(", # that trigger invalid metadata " + invalidMetadata)
+                  .append(" => " + rate)
+                  .append(Utils.NEWLINE);
+            }
+        }
+    
+        return sb.toString();
+    }
+
 }

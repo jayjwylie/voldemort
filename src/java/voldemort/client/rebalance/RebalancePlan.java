@@ -30,7 +30,9 @@ import voldemort.cluster.Node;
 import voldemort.store.StoreDefinition;
 import voldemort.tools.PartitionBalance;
 import voldemort.utils.MoveMap;
+import voldemort.utils.PartitionBalanceUtils;
 import voldemort.utils.RebalanceUtils;
+import voldemort.utils.UpdateClusterUtils;
 import voldemort.utils.Utils;
 
 import com.google.common.collect.Lists;
@@ -181,7 +183,7 @@ public class RebalancePlan {
             List<Entry<Integer, Integer>> partitionsMoved = Lists.newArrayList();
             for(Entry<Integer, Integer> stealerToPartition: stealerToStolenPrimaryPartitions.entries()) {
                 partitionsMoved.add(stealerToPartition);
-                batchFinalCluster = RebalanceUtils.createUpdatedCluster(batchFinalCluster,
+                batchFinalCluster = UpdateClusterUtils.createUpdatedCluster(batchFinalCluster,
                                                                         stealerToPartition.getKey(),
                                                                         Lists.newArrayList(stealerToPartition.getValue()));
                 partitions++;
@@ -329,7 +331,7 @@ public class RebalancePlan {
             sb.append(batchPlan).append(Utils.NEWLINE);
         }
         // Add invalid metadata rate analysis
-        sb.append(RebalanceUtils.analyzeInvalidMetadataRate(currentCluster,
+        sb.append(PartitionBalanceUtils.analyzeInvalidMetadataRate(currentCluster,
                                                             currentStoreDefs,
                                                             finalCluster,
                                                             finalStoreDefs));

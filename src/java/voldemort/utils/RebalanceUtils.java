@@ -18,7 +18,6 @@ package voldemort.utils;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -53,14 +52,11 @@ import voldemort.routing.StoreRoutingPlan;
 import voldemort.server.VoldemortConfig;
 import voldemort.server.rebalance.VoldemortRebalancingException;
 import voldemort.store.StoreDefinition;
-import voldemort.store.StoreUtils;
 import voldemort.store.bdb.BdbStorageConfiguration;
 import voldemort.store.metadata.MetadataStore.VoldemortState;
 import voldemort.store.readonly.ReadOnlyStorageConfiguration;
 import voldemort.store.readonly.ReadOnlyStorageFormat;
 import voldemort.tools.PartitionBalance;
-import voldemort.versioning.Occurred;
-import voldemort.versioning.VectorClock;
 import voldemort.versioning.Versioned;
 import voldemort.xml.ClusterMapper;
 
@@ -81,47 +77,6 @@ public class RebalanceUtils {
 
     public final static String currentClusterFileName = "current-cluster.xml";
     public final static String finalClusterFileName = "final-cluster.xml";
-
-    /**
-     * Given the current replica to partition list, try to check if the donor
-     * node would already contain that partition and if yes, ignore it
-     * 
-     * @param stealerNodeId Stealer node id
-     * @param cluster Cluster metadata
-     * @param storeDef Store definition
-     * @param currentReplicaToPartitionList Current replica to partition list
-     * @return Optimized replica to partition list
-     */
-    public static HashMap<Integer, List<Integer>> getOptimizedReplicaToPartitionList(int stealerNodeId,
-                                                                                     Cluster cluster,
-                                                                                     StoreDefinition storeDef,
-                                                                                     HashMap<Integer, List<Integer>> currentReplicaToPartitionList) {
-
-        HashMap<Integer, List<Integer>> optimizedReplicaToPartitionList = Maps.newHashMap();
-        RoutingStrategy strategy = new RoutingStrategyFactory().updateRoutingStrategy(storeDef,
-                                                                                      cluster);
-        for(Entry<Integer, List<Integer>> tuple: currentReplicaToPartitionList.entrySet()) {
-            List<Integer> partitionList = Lists.newArrayList();
-            for(int partition: tuple.getValue()) {
-                List<Integer> preferenceList = strategy.getReplicatingPartitionList(partition);
-
-                // If this node was already in the
-                // preference list before, a copy of the
-                // data will already exist - Don't copy
-                // it!
-                if(!ClusterUtils.containsPreferenceList(cluster, preferenceList, stealerNodeId)) {
-                    partitionList.add(partition);
-                }
-            }
-
-            if(partitionList.size() > 0) {
-                optimizedReplicaToPartitionList.put(tuple.getKey(), partitionList);
-            }
-        }
-
-        return optimizedReplicaToPartitionList;
-
-    }
 
     // TODO: (refactor) Either move all methods that take an AdminClient
     // somewhere else. Either (i) into a name space of AdminClient or (ii)
@@ -161,17 +116,6 @@ public class RebalanceUtils {
             }
         }
         return latestCluster;
-    }
-
-    private static void checkNotConcurrent(ArrayList<Versioned<Cluster>> clockList,
-                                           VectorClock newClock) {
-        for(Versioned<Cluster> versionedCluster: clockList) {
-            VectorClock clock = (VectorClock) versionedCluster.getVersion();
-            if(Occurred.CONCURRENTLY.equals(clock.compare(newClock)))
-                throw new VoldemortException("Cluster is in inconsistent state because we got conflicting clocks "
-                                             + clock + " and on current node " + newClock);
-
-        }
     }
 
     /**
@@ -425,94 +369,14 @@ public class RebalanceUtils {
     public static Cluster getInterimCluster(Cluster currentCluster, Cluster finalCluster) {
         List<Node> newNodeList = new ArrayList<Node>(currentCluster.getNodes());
         for(Node node: finalCluster.getNodes()) {
-            if(!ClusterUtils.containsNode(currentCluster, node.getId())) {
-                newNodeList.add(NodeUtils.updateNode(node, new ArrayList<Integer>()));
+            if(!currentCluster.hasNodeWithId(node.getId())) {
+                newNodeList.add(UpdateClusterUtils.updateNode(node, new ArrayList<Integer>()));
             }
         }
         Collections.sort(newNodeList);
         return new Cluster(currentCluster.getName(),
                            newNodeList,
                            Lists.newArrayList(finalCluster.getZones()));
-    }
-
-    /**
-     * Given the current cluster and an interim cluster, generates a cluster
-     * with new nodes (which in turn contain empty partition lists).
-     * 
-     * @param currentCluster Current cluster metadata
-     * @param interimCluster Interim cluster metadata
-     * @return Returns a new cluster which contains nodes of the current cluster
-     *         + new nodes
-     */
-    public static Cluster getClusterWithNewNodes(Cluster currentCluster, Cluster interimCluster) {
-        return getInterimCluster(currentCluster, interimCluster);
-    }
-
-    /**
-     * Concatenates the list of current nodes in the given cluster with the new
-     * nodes provided and returns an updated cluster metadata. <br>
-     * If the nodes being updated already exist in the current metadata, we take
-     * the updated ones
-     * 
-     * @param currentCluster The current cluster metadata
-     * @param updatedNodeList The list of new nodes to be added
-     * @return New cluster metadata containing both the sets of nodes
-     */
-    public static Cluster updateCluster(Cluster currentCluster, List<Node> updatedNodeList) {
-        List<Node> newNodeList = new ArrayList<Node>(updatedNodeList);
-        for(Node currentNode: currentCluster.getNodes()) {
-            if(!updatedNodeList.contains(currentNode))
-                newNodeList.add(currentNode);
-        }
-
-        Collections.sort(newNodeList);
-        return new Cluster(currentCluster.getName(),
-                           newNodeList,
-                           Lists.newArrayList(currentCluster.getZones()));
-    }
-
-    /**
-     * Updates the existing cluster such that we remove partitions mentioned
-     * from the stealer node and add them to the donor node
-     * 
-     * @param currentCluster Existing cluster metadata. Both stealer and donor
-     *        node should already exist in this metadata
-     * @param stealerNodeId Id of node for which we are stealing the partitions
-     * @param donatedPartitions List of partitions we are moving
-     * @param partitionList List of partitions we are moving
-     * @return Updated cluster metadata
-     */
-    public static Cluster createUpdatedCluster(Cluster currentCluster,
-                                               int stealerNodeId,
-                                               List<Integer> donatedPartitions) {
-
-        // Clone the cluster
-        ClusterMapper mapper = new ClusterMapper();
-        Cluster updatedCluster = mapper.readCluster(new StringReader(mapper.writeCluster(currentCluster)));
-
-        // Go over every donated partition one by one
-        for(int donatedPartition: donatedPartitions) {
-
-            // Gets the donor Node that owns this donated partition
-            Node donorNode = updatedCluster.getNodeForPartitionId(donatedPartition);
-            Node stealerNode = updatedCluster.getNodeById(stealerNodeId);
-
-            if(donorNode == stealerNode) {
-                // Moving to the same location = No-op
-                continue;
-            }
-
-            // Update the list of partitions for this node
-            donorNode = NodeUtils.removePartitionToNode(donorNode, donatedPartition);
-            stealerNode = NodeUtils.addPartitionToNode(stealerNode, donatedPartition);
-
-            // Sort the nodes
-            updatedCluster = updateCluster(updatedCluster,
-                                           Lists.newArrayList(donorNode, stealerNode));
-
-        }
-
-        return updatedCluster;
     }
 
     /**
@@ -533,7 +397,7 @@ public class RebalanceUtils {
                                                                      .getPartitionIds());
 
         List<Integer> currentList = new ArrayList<Integer>();
-        if(ClusterUtils.containsNode(currentCluster, stealNodeId)) {
+        if(currentCluster.hasNodeWithId(stealNodeId)) {
             currentList = currentCluster.getNodeById(stealNodeId).getPartitionIds();
         } else {
             if(logger.isDebugEnabled()) {
@@ -555,9 +419,10 @@ public class RebalanceUtils {
      * @return Map of stealer node id to sets of [ replica_type, partition ]
      *         tuples
      */
-    public static Map<Integer, Set<Pair<Integer, Integer>>> getStolenPartitionTuples(final Cluster currentCluster,
-                                                                                     final Cluster finalCluster,
-                                                                                     final StoreDefinition storeDef) {
+    public static Map<Integer, Set<Pair<Integer, Integer>>>
+            getStolenPartitionTuples(final Cluster currentCluster,
+                                     final Cluster finalCluster,
+                                     final StoreDefinition storeDef) {
         Map<Integer, Set<Pair<Integer, Integer>>> currentNodeIdToReplicas = getNodeIdToAllPartitions(currentCluster,
                                                                                                      storeDef,
                                                                                                      true);
@@ -566,7 +431,7 @@ public class RebalanceUtils {
                                                                                                    true);
 
         Map<Integer, Set<Pair<Integer, Integer>>> stealerNodeToStolenPartitionTuples = Maps.newHashMap();
-        for(int stealerId: NodeUtils.getNodeIds(Lists.newArrayList(finalCluster.getNodes()))) {
+        for(int stealerId: Utils.nodeListToNodeIdList(Lists.newArrayList(finalCluster.getNodes()))) {
             Set<Pair<Integer, Integer>> clusterStealerReplicas = currentNodeIdToReplicas.get(stealerId);
             Set<Pair<Integer, Integer>> finalStealerReplicas = finalNodeIdToReplicas.get(stealerId);
 
@@ -589,8 +454,9 @@ public class RebalanceUtils {
      *        the new partition tuples at the end of this function )
      * @param newPartitionTuples New partition tuples
      */
-    public static void combinePartitionTuples(Map<Integer, Set<Pair<Integer, Integer>>> existingPartitionTuples,
-                                              Map<Integer, Set<Pair<Integer, Integer>>> newPartitionTuples) {
+    public static void
+            combinePartitionTuples(Map<Integer, Set<Pair<Integer, Integer>>> existingPartitionTuples,
+                                   Map<Integer, Set<Pair<Integer, Integer>>> newPartitionTuples) {
 
         for(int nodeId: newPartitionTuples.keySet()) {
             Set<Pair<Integer, Integer>> tuples = null;
@@ -613,14 +479,15 @@ public class RebalanceUtils {
      * @param includePrimary Include the primary partition?
      * @return Map of node id to set of [ replicaType, partition ] tuple
      */
-    public static Map<Integer, Set<Pair<Integer, Integer>>> getNodeIdToAllPartitions(final Cluster cluster,
-                                                                                     final StoreDefinition storeDef,
-                                                                                     boolean includePrimary) {
+    public static Map<Integer, Set<Pair<Integer, Integer>>>
+            getNodeIdToAllPartitions(final Cluster cluster,
+                                     final StoreDefinition storeDef,
+                                     boolean includePrimary) {
         final RoutingStrategy routingStrategy = new RoutingStrategyFactory().updateRoutingStrategy(storeDef,
                                                                                                    cluster);
 
         final Map<Integer, Set<Pair<Integer, Integer>>> nodeIdToReplicas = new HashMap<Integer, Set<Pair<Integer, Integer>>>();
-        final Map<Integer, Integer> partitionToNodeIdMap = ClusterUtils.getCurrentPartitionMapping(cluster);
+        final Map<Integer, Integer> partitionToNodeIdMap = cluster.getPartitionIdToNodeIdMap();
 
         // Map initialization.
         for(Node node: cluster.getNodes()) {
@@ -847,7 +714,8 @@ public class RebalanceUtils {
      * @param nodeIdToAllPartitions Mapping of node id to all tuples
      * @return Returns a string representation of the cluster
      */
-    public static String printMap(final Map<Integer, Set<Pair<Integer, Integer>>> nodeIdToAllPartitions) {
+    public static String
+            printMap(final Map<Integer, Set<Pair<Integer, Integer>>> nodeIdToAllPartitions) {
         StringBuilder sb = new StringBuilder();
         for(Map.Entry<Integer, Set<Pair<Integer, Integer>>> entry: nodeIdToAllPartitions.entrySet()) {
             final Integer nodeId = entry.getKey();
@@ -981,7 +849,8 @@ public class RebalanceUtils {
      * @param partitionTuples Set of <replica_type, partition> tuples
      * @return Map of replica_type to set of partitions
      */
-    public static HashMap<Integer, List<Integer>> flattenPartitionTuples(Set<Pair<Integer, Integer>> partitionTuples) {
+    public static HashMap<Integer, List<Integer>>
+            flattenPartitionTuples(Set<Pair<Integer, Integer>> partitionTuples) {
         HashMap<Integer, List<Integer>> flattenedTuples = Maps.newHashMap();
         for(Pair<Integer, Integer> pair: partitionTuples) {
             if(flattenedTuples.containsKey(pair.getFirst())) {
@@ -1010,7 +879,8 @@ public class RebalanceUtils {
      * @param replicaToPartitionList Map of replica_type to set of partitions
      * @return Set of <replica_type, partition> tuples
      */
-    public static Set<Pair<Integer, Integer>> flattenPartitionTuples(HashMap<Integer, List<Integer>> replicaToPartitionList) {
+    public static Set<Pair<Integer, Integer>>
+            flattenPartitionTuples(HashMap<Integer, List<Integer>> replicaToPartitionList) {
         Set<Pair<Integer, Integer>> partitionTuples = Sets.newHashSet();
 
         for(Entry<Integer, List<Integer>> entry: replicaToPartitionList.entrySet()) {
@@ -1048,8 +918,9 @@ public class RebalanceUtils {
      * @param storeDefs List of store names we are rebalancing
      * @return List of updated partition plan
      */
-    public static List<RebalancePartitionsInfo> filterPartitionPlanWithStores(List<RebalancePartitionsInfo> existingPlanList,
-                                                                              List<StoreDefinition> storeDefs) {
+    public static List<RebalancePartitionsInfo>
+            filterPartitionPlanWithStores(List<RebalancePartitionsInfo> existingPlanList,
+                                          List<StoreDefinition> storeDefs) {
         List<RebalancePartitionsInfo> plans = Lists.newArrayList();
         List<String> storeNames = StoreDefinitionUtils.getStoreNames(storeDefs);
 
@@ -1082,8 +953,9 @@ public class RebalanceUtils {
      *        stealer node ( or donor node )
      * @return Flattens it into a map on a per node basis
      */
-    public static HashMap<Integer, List<RebalancePartitionsInfo>> groupPartitionsInfoByNode(List<RebalancePartitionsInfo> rebalancePartitionPlanList,
-                                                                                            boolean groupByStealerNode) {
+    public static HashMap<Integer, List<RebalancePartitionsInfo>>
+            groupPartitionsInfoByNode(List<RebalancePartitionsInfo> rebalancePartitionPlanList,
+                                      boolean groupByStealerNode) {
         HashMap<Integer, List<RebalancePartitionsInfo>> nodeToPartitionsInfo = Maps.newHashMap();
         if(rebalancePartitionPlanList != null) {
             for(RebalancePartitionsInfo partitionInfo: rebalancePartitionPlanList) {
@@ -1126,74 +998,6 @@ public class RebalanceUtils {
                 return thread;
             }
         });
-    }
-
-    // TODO: (refactor) separate analysis from pretty printing and add a unit
-    // test for the analysis sub-method.
-    /**
-     * Compares current cluster with final cluster. Uses pertinent store defs
-     * for each cluster to determine if a node that hosts a zone-primary in the
-     * current cluster will no longer host any zone-nary in the final cluster.
-     * This check is the precondition for a server returning an invalid metadata
-     * exception to a client on a normal-case put or get. Normal-case being that
-     * the zone-primary receives the pseudo-master put or the get operation.
-     * 
-     * @param currentCluster
-     * @param currentStoreDefs
-     * @param finalCluster
-     * @param finalStoreDefs
-     * @return pretty-printed string documenting invalid metadata rates for each
-     *         zone.
-     */
-    public static String analyzeInvalidMetadataRate(final Cluster currentCluster,
-                                                    List<StoreDefinition> currentStoreDefs,
-                                                    final Cluster finalCluster,
-                                                    List<StoreDefinition> finalStoreDefs) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Dump of invalid metadata rates per zone").append(Utils.NEWLINE);
-
-        HashMap<StoreDefinition, Integer> uniqueStores = StoreDefinitionUtils.getUniqueStoreDefinitionsWithCounts(currentStoreDefs);
-
-        for(StoreDefinition currentStoreDef: uniqueStores.keySet()) {
-            sb.append("Store exemplar: " + currentStoreDef.getName())
-              .append(Utils.NEWLINE)
-              .append("\tThere are " + uniqueStores.get(currentStoreDef) + " other similar stores.")
-              .append(Utils.NEWLINE);
-
-            StoreRoutingPlan currentSRP = new StoreRoutingPlan(currentCluster, currentStoreDef);
-            StoreDefinition finalStoreDef = StoreUtils.getStoreDef(finalStoreDefs,
-                                                                   currentStoreDef.getName());
-            StoreRoutingPlan finalSRP = new StoreRoutingPlan(finalCluster, finalStoreDef);
-
-            // Only care about existing zones
-            for(int zoneId: currentCluster.getZoneIds()) {
-                int zonePrimariesCount = 0;
-                int invalidMetadata = 0;
-
-                // Examine nodes in current cluster in existing zone.
-                for(int nodeId: currentCluster.getNodeIdsInZone(zoneId)) {
-                    // For every zone-primary in current cluster
-                    for(int zonePrimaryPartitionId: currentSRP.getZonePrimaryPartitionIds(nodeId)) {
-                        zonePrimariesCount++;
-                        // Determine if original zone-primary node is still some
-                        // form of n-ary in final cluster. If not,
-                        // InvalidMetadataException will fire.
-                        if(!finalSRP.getZoneNAryPartitionIds(nodeId)
-                                    .contains(zonePrimaryPartitionId)) {
-                            invalidMetadata++;
-                        }
-                    }
-                }
-                float rate = invalidMetadata / (float) zonePrimariesCount;
-                sb.append("\tZone " + zoneId)
-                  .append(" : total zone primaries " + zonePrimariesCount)
-                  .append(", # that trigger invalid metadata " + invalidMetadata)
-                  .append(" => " + rate)
-                  .append(Utils.NEWLINE);
-            }
-        }
-
-        return sb.toString();
     }
 
 }
