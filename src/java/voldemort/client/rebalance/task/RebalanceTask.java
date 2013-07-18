@@ -154,10 +154,10 @@ public abstract class RebalanceTask implements Runnable {
         if(taskCompletionTimeMs >= 0) {
             long durationMs = System.currentTimeMillis() - taskCompletionTimeMs;
             taskCompletionTimeMs = -1;
-            durationString = " in " + TimeUnit.MILLISECONDS.toSeconds(durationMs) + " seconds.";
+            durationString = TimeUnit.MILLISECONDS.toSeconds(durationMs) + " seconds.";
         }
-        taskLog("Successfully finished rebalance of " + partitionStoreCount
-                + " for async operation id " + rebalanceAsyncId + durationString);
+        taskLog("Rebalnce task with async operation id " + rebalanceAsyncId + " completed in "
+                + durationString);
 
         progressBar.completeTask(taskId, partitionStoreCount);
     }

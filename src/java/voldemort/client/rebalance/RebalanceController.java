@@ -17,6 +17,7 @@
 package voldemort.client.rebalance;
 
 import java.text.DecimalFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
@@ -142,11 +143,24 @@ public class RebalanceController {
      * Validate the plan, validate the cluster, and then kick off rebalance.
      * 
      * @param rebalancePlan
+     * @return true iff rebalance completed successfully.
      */
-    public void rebalance(final RebalancePlan rebalancePlan) {
+    public boolean rebalance(final RebalancePlan rebalancePlan) {
         validateRebalancePlanState(rebalancePlan);
         validateClusterForRebalance(rebalancePlan);
-        executePlan(rebalancePlan);
+        try {
+            // TODO: Unclear if returning true/false is right approach, or
+            // whether exception should throw past this interface.
+
+            // TODO: Can this try/catch handle CTRL-C / kill -SIGINT / kill -9?
+            // Do we need to dive deeper into code to make handling
+            // "killing the controller" more graceful?
+            executePlan(rebalancePlan);
+        } catch(Exception e) {
+            logger.info("Rebalance failed due to exception. " + e);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -520,6 +534,47 @@ public class RebalanceController {
         }
     }
 
+    /**
+     * This helper method is used exclusively by executeSubBatch
+     * 
+     * @param hasReadOnlyStores
+     * @param hasReadWriteStores
+     * @param finishedReadOnlyStores
+     * @param batchRollbackCluster
+     * @param batchRollbackStoreDefs
+     */
+    private void doRollback(boolean hasReadOnlyStores,
+                            boolean hasReadWriteStores,
+                            boolean finishedReadOnlyStores,
+                            final Cluster batchRollbackCluster,
+                            final List<StoreDefinition> batchRollbackStoreDefs) {
+        if(hasReadOnlyStores && hasReadWriteStores && finishedReadOnlyStores) {
+            // Case 0
+            adminClient.rebalanceOps.rebalanceStateChange(null,
+                                                          batchRollbackCluster,
+                                                          null,
+                                                          batchRollbackStoreDefs,
+                                                          null,
+                                                          true,
+                                                          true,
+                                                          false,
+                                                          false,
+                                                          false);
+        } else if(hasReadWriteStores && finishedReadOnlyStores) {
+            // Case 4
+            adminClient.rebalanceOps.rebalanceStateChange(null,
+                                                          batchRollbackCluster,
+                                                          null,
+                                                          batchRollbackStoreDefs,
+                                                          null,
+                                                          false,
+                                                          true,
+                                                          false,
+                                                          false,
+                                                          false);
+        }
+    }
+
     // TODO: (refactor) Break this state-machine like method into multiple "sub"
     // methods. AFAIK, this method either does the RO stores or the RW stores in
     // a batch. I.e., there are at most 2 sub-batches for any given batch. And,
@@ -579,12 +634,26 @@ public class RebalanceController {
 
         try {
             // List of tasks which will run asynchronously
-            List<RebalanceTask> allTasks = executeTasks(batchId,
-                                                        progressBar,
-                                                        service,
-                                                        rebalancePartitionPlanList,
-                                                        donorPermits);
-            RebalanceUtils.printBatchLog(batchId, logger, "All rebalance tasks submitted");
+            List<RebalanceTask> allTasks = null;
+            try {
+                allTasks = executeTasks(batchId,
+                                        progressBar,
+                                        service,
+                                        rebalancePartitionPlanList,
+                                        donorPermits);
+                RebalanceUtils.printBatchLog(batchId, logger, "All rebalance tasks submitted");
+            } catch(Exception e) {
+                // TODO: Rationalize exception throwing catching down the path
+                // of executeTasks to make sure that all exceptions are
+                // converted to VoldemortRebalancignExcetpoin. Or, invoke
+                // doRollback() in the face of all exceptions. I.e., remove the
+                // below incompleteTasks.size() check that tries to avoid
+                // rolling back in the face of some specific type of timeout.
+                List<Exception> failures = new ArrayList<Exception>();
+                failures.add(e);
+                throw new VoldemortRebalancingException("Exception thrown from executeTasks. Converting to VoldemortRebalancingException for sake of how that exception is handled.",
+                                                        failures);
+            }
 
             // Wait and shutdown after (infinite) timeout
             RebalanceUtils.executorShutDown(service, Long.MAX_VALUE);
@@ -608,6 +677,9 @@ public class RebalanceController {
                                                         failures);
             }
 
+            // TODO: Don't treat incompleteTasks as special case. Code is
+            // probably useless. If anything is wrong, just rollback.
+
             // If there were no failures, then we could have had a genuine
             // timeout ( Rebalancing took longer than the operator expected ).
             // We should throw a VoldemortException and not a
@@ -622,33 +694,11 @@ public class RebalanceController {
         } catch(VoldemortRebalancingException e) {
 
             logger.error("Failure while migrating partitions for rebalance task " + batchId);
-
-            if(hasReadOnlyStores && hasReadWriteStores && finishedReadOnlyStores) {
-                // Case 0
-                adminClient.rebalanceOps.rebalanceStateChange(null,
-                                                              batchRollbackCluster,
-                                                              null,
-                                                              batchRollbackStoreDefs,
-                                                              null,
-                                                              true,
-                                                              true,
-                                                              false,
-                                                              false,
-                                                              false);
-            } else if(hasReadWriteStores && finishedReadOnlyStores) {
-                // Case 4
-                adminClient.rebalanceOps.rebalanceStateChange(null,
-                                                              batchRollbackCluster,
-                                                              null,
-                                                              batchRollbackStoreDefs,
-                                                              null,
-                                                              false,
-                                                              true,
-                                                              false,
-                                                              false,
-                                                              false);
-            }
-
+            doRollback(hasReadOnlyStores,
+                       hasReadWriteStores,
+                       finishedReadOnlyStores,
+                       batchRollbackCluster,
+                       batchRollbackStoreDefs);
             throw e;
 
         } finally {

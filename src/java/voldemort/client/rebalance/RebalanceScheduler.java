@@ -129,11 +129,13 @@ public class RebalanceScheduler {
         // Start scheduling tasks to execute!
         scheduleMoreTasks();
         try {
+            logger.info("RebalanceScheduler is starting to wait for all rebalancing tasks to be scheduled and complete.");
             doneSignal.await();
+            logger.info("RebalanceScheduler is done waiting to for all rebalancing tasks to be scheduled and complete.");
         } catch(InterruptedException e) {
-            logger.error("RebalancController scheduler interrupted while waiting for rebalance "
+            logger.error("RebalanceScheduler interrupted while waiting for rebalance "
                          + "tasks to be scheduled.", e);
-            throw new VoldemortRebalancingException("RebalancController scheduler interrupted "
+            throw new VoldemortRebalancingException("RebalanceScheduler interrupted "
                                                     + "while waiting for rebalance tasks to be "
                                                     + "scheduled.");
         }
@@ -153,6 +155,19 @@ public class RebalanceScheduler {
         RebalanceTask scheduledTask = scheduleNextTask();
         while(scheduledTask != null) {
             scheduledTask = scheduleNextTask();
+        }
+    }
+
+    /**
+     * Cancels all StealerBasedRebalanceTasks that have yet to be scheduled.
+     */
+    private synchronized void cancelUnscheduledTasks() {
+        logger.info("Cancelling all unscheduled rebalance tasks.");
+        for(Integer stealerId: tasksByStealer.keySet()) {
+            for(int i = 0; i < tasksByStealer.get(stealerId).size(); i++) {
+                doneSignal.countDown();
+            }
+            tasksByStealer.get(stealerId).clear();
         }
     }
 
@@ -246,13 +261,19 @@ public class RebalanceScheduler {
      * 
      * @param stealerId
      * @param donorId
+     * @param success true iff task completed without exception.
      */
-    public synchronized void doneTask(int stealerId, int donorId) {
+    public synchronized void doneTask(int stealerId, int donorId, boolean success) {
         removeNodesFromWorkerList(Arrays.asList(stealerId, donorId));
         numTasksExecuting--;
         doneSignal.countDown();
-        // Try and schedule more tasks now that resources may be available to do
-        // so.
-        scheduleMoreTasks();
+
+        if(success) {
+            // Try and schedule more tasks now that resources may be available
+            // to do so.
+            scheduleMoreTasks();
+        } else {
+            cancelUnscheduledTasks();
+        }
     }
 }

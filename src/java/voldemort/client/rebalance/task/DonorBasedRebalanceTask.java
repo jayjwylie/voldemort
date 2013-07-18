@@ -65,7 +65,8 @@ public class DonorBasedRebalanceTask extends RebalanceTask {
             taskStart(rebalanceAsyncId);
 
             adminClient.rpcOps.waitForCompletion(donorNodeId, rebalanceAsyncId);
-            taskDone(rebalanceAsyncId);
+            taskLog("Successfully finished rebalance of " + partitionStoreCount
+                    + " for async operation id " + rebalanceAsyncId);
 
         } catch(UnreachableStoreException e) {
             exception = e;
@@ -77,6 +78,7 @@ public class DonorBasedRebalanceTask extends RebalanceTask {
             exception = e;
             logger.error("Rebalance failed : " + e.getMessage(), e);
         } finally {
+            taskDone(rebalanceAsyncId);
             donorPermit.release();
             isComplete.set(true);
         }

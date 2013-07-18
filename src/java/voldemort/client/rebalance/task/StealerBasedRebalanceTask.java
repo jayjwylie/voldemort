@@ -97,7 +97,8 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
             taskStart(rebalanceAsyncId);
 
             adminClient.rpcOps.waitForCompletion(stealerNodeId, rebalanceAsyncId);
-            taskDone(rebalanceAsyncId);
+            taskLog("Successfully finished rebalance of " + partitionStoreCount
+                    + " for async operation id " + rebalanceAsyncId);
 
         } catch(UnreachableStoreException e) {
             exception = e;
@@ -109,9 +110,11 @@ public class StealerBasedRebalanceTask extends RebalanceTask {
             exception = e;
             logger.error("Rebalance failed : " + e.getMessage(), e);
         } finally {
+            taskDone(rebalanceAsyncId);
             donorPermit.release();
             isComplete.set(true);
-            scheduler.doneTask(stealerNodeId, donorNodeId);
+            boolean success = exception == null;
+            scheduler.doneTask(stealerNodeId, donorNodeId, success);
         }
     }
 
