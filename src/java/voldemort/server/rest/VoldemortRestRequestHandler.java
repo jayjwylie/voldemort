@@ -151,7 +151,7 @@ public class VoldemortRestRequestHandler extends SimpleChannelUpstreamHandler {
      * 
      * @param name - store name
      * @param type - routing type from the request
-     * @return
+     * @return Store for given store name and routing.
      */
     protected Store<ByteArray, byte[], byte[]> getStore(String name, RequestRoutingType type) {
 

@@ -80,7 +80,7 @@ public class HttpGetAllRequestExecutor implements Runnable {
      * 
      * @param getAllRequestObject The request object containing key and timeout
      *        values
-     * @param requestEvent Reference to the MessageEvent for the response /
+     * @param requestMessageEvent Reference to the MessageEvent for the response /
      *        error
      * @param storeClient Reference to the fat client for performing this Get
      *        operation
